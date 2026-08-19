@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: product-service
-          image: ghcr.io/kimsukhwan/msa-k3s-lab-product-service:494e2df1998685ee0ee27a54209826ac9040fee2
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-product-service:326f519a6abc7a36ae849bb6e90ee03a0ae6827f
           imagePullPolicy: Always
           env:
             - name: REDIS_HOST
