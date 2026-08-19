@@ -212,16 +212,16 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    SA["슈퍼앱 (auth-service가 대역)"] -->|"① 로그인 → RS256 JWT<br/>claims: sub, custKey, aud=bank-api"| G["gateway"]
+    SA["슈퍼앱 (auth-service가 대역)"] -->|"① 로그인 → RS256 JWT<br/>claims: sub, custKey, aud=https://api.n2soft-bank.internal"| G["gateway"]
     G -->|"② 서명 검증(JWKS) + aud 검증"| G
     G -->|"③ custKey → custId 변환<br/>(CustomerKeyResolver, 단일 지점)"| G
     G -->|"④ X-Cust-Id 헤더로 하위 전파<br/>(custKey는 여기서 끝)"| O["order-service / product-service"]
 ```
 
-- **claims 확장** — 토큰에 `custKey`(슈퍼앱 고객키)와 `aud: "bank-api"`가 실립니다. `aud`가
+- **claims 확장** — 토큰에 `custKey`(슈퍼앱 고객키)와 `aud: "https://api.n2soft-bank.internal"`가 실립니다. `aud`가
   "이 토큰이 누구에게 발급됐는가"를 말해주는 필드입니다.
 - **왜 aud 검증이 필수인가** — 서명 검증만으로는 "같은 IdP가 발급한 진짜 토큰"인지만 압니다.
-  같은 슈퍼앱이 **다른 제휴사(partner-mall)용**으로 서명한 토큰도 서명 검증은 통과합니다.
+  같은 슈퍼앱이 **다른 제휴사(https://api.partner-mall.example)용**으로 서명한 토큰도 서명 검증은 통과합니다.
   gateway의 `SecurityConfig.jwtDecoder()`가 기본 검증(서명·만료)에 audience 검증을 추가로
   붙였고, 이게 없으면 "제휴사용 토큰 재사용" 공격이 그대로 성립합니다. 화면의
   **"다른 제휴사용 토큰 재사용 공격"** 카드가 이걸 실측으로 보여줍니다.

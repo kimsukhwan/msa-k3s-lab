@@ -20,7 +20,7 @@ import java.util.UUID
 class JwtIssuer {
     companion object {
         /** 은행 시스템용 수신자 표시 — 검증측이 이 값을 확인해야 "다른 제휴사용 토큰 재사용"이 막힌다. */
-        const val BANK_AUDIENCE = "bank-api"
+        const val BANK_AUDIENCE = "https://api.n2soft-bank.internal"
     }
 
     private val rsaKey = RSAKeyGenerator(2048).keyID(UUID.randomUUID().toString()).generate()

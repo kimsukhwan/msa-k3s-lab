@@ -64,7 +64,7 @@ class AuthController(
         log.info("제휴사용(aud=partner-mall) 토큰 발급 — 재사용 공격 시연용 username={}", request.username)
         return ResponseEntity.ok(
             TokenResponse(
-                accessToken = jwtIssuer.issue(request.username, user.custKey, audience = "partner-mall"),
+                accessToken = jwtIssuer.issue(request.username, user.custKey, audience = "https://api.partner-mall.example"),
                 expiresInSeconds = jwtIssuer.tokenTtl.seconds,
                 custKey = user.custKey,
             ),

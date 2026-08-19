@@ -30,7 +30,7 @@ class SecurityConfig(
         // auth-service 의 JwtIssuer.BANK_AUDIENCE 와 반드시 같은 문자열이어야 한다 — 두 모듈이
         // 서로를 의존하지 않는 별도 시스템이라 상수를 공유하지 않고 값으로만 맞춘다(실서비스의
         // 슈퍼앱-은행 연계와 동일한 상황: 상수가 아니라 "연계 규약 문서"로 값을 맞춘다).
-        const val EXPECTED_AUDIENCE = "bank-api"
+        const val EXPECTED_AUDIENCE = "https://api.n2soft-bank.internal"
     }
 
     // 서명·만료 검증(JwtValidators 기본)에 audience 검증을 더한다.
