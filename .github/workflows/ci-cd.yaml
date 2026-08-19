@@ -41,6 +41,8 @@ jobs:
           # GITHUB_TOKEN은 Actions가 매 실행마다 자동 발급 — 개인 비밀번호/PAT을 쓰지 않는다.
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Build and push ${{ matrix.service }}
@@ -49,6 +51,9 @@ jobs:
           context: .
           file: ${{ matrix.service }}/Dockerfile
           push: true
+          # GitHub 러너는 amd64인데 로컬 k3d(Apple Silicon)는 arm64라 플랫폼이 안 맞으면
+          # ImagePullBackOff("no match for platform in manifest")가 난다 — 멀티아키텍처로 빌드한다.
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-${{ matrix.service }}:latest
             ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-${{ matrix.service }}:${{ github.sha }}

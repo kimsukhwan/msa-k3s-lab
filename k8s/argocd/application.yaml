@@ -1,0 +1,25 @@
+# ArgoCD 자체 설치용이 아니라, ArgoCD에게 "이 저장소의 k8s/를 감시해라"라고
+# 등록하는 Application 리소스다. argocd 네임스페이스에 직접 적용한다:
+#   kubectl apply -n argocd -f k8s/argocd/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: msa-k3s-lab
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kimsukhwan/msa-k3s-lab.git
+    targetRevision: main
+    path: k8s
+    directory:
+      recurse: false # k8s/lgtm/ 등 하위 디렉터리(Helm values, 대시보드 JSON)는 건드리지 않는다
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
