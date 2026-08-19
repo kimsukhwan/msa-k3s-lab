@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>msa-k3s-lab 프론트엔드</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 20px; }
+  .row { display: flex; gap: 8px; margin: 12px 0; align-items: center; }
+  input { padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; width: 60px; }
+  button { padding: 6px 14px; border: 1px solid #666; border-radius: 6px; background: #fff; cursor: pointer; }
+  button:hover { background: #f0f0f0; }
+  pre { background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; padding: 12px; white-space: pre-wrap; word-break: break-all; }
+  .card { border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; margin: 16px 0; }
+  .pod { display: inline-block; margin-top: 8px; font-size: 12px; color: #666; background: #eef; padding: 2px 8px; border-radius: 12px; }
+  .err { color: #c0392b; }
+  .base-url { font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+  <h1>msa-k3s-lab — gateway 호출 데모</h1>
+  <p class="base-url">Base URL: <code id="baseUrlLabel"></code> (k3d Ingress를 통해 클러스터 안으로 들어갑니다)</p>
+
+  <div class="card">
+    <h3>① 상품 조회 — product-service</h3>
+    <div class="row">
+      <label>상품 ID</label>
+      <input id="productId" type="number" value="1" min="1" max="3" />
+      <button onclick="getProduct()">조회</button>
+    </div>
+    <pre id="productResult">아직 호출 안 함</pre>
+  </div>
+
+  <div class="card">
+    <h3>② 주문하기 — gateway → order-service → product-service</h3>
+    <div class="row">
+      <label>상품 ID</label>
+      <input id="orderProductId" type="number" value="2" min="1" max="3" />
+      <button onclick="placeOrder()">주문</button>
+    </div>
+    <pre id="orderResult">아직 호출 안 함</pre>
+  </div>
+
+  <div class="card">
+    <h3>③ 로드밸런싱 체감 — 같은 상품을 5번 연속 호출</h3>
+    <div class="row">
+      <button onclick="hammer()">5번 연속 호출</button>
+    </div>
+    <pre id="hammerResult">아직 호출 안 함</pre>
+  </div>
+
+<script>
+  const BASE_URL = "http://localhost:8888";
+  document.getElementById("baseUrlLabel").textContent = BASE_URL;
+
+  async function callApi(path) {
+    const res = await fetch(BASE_URL + path);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+
+  async function getProduct() {
+    const id = document.getElementById("productId").value;
+    const el = document.getElementById("productResult");
+    el.textContent = "호출 중...";
+    try {
+      const data = await callApi("/api/products/" + id);
+      el.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      el.innerHTML = '<span class="err">실패: ' + e.message + " — gateway(8888)가 떠 있는지 확인하세요</span>";
+    }
+  }
+
+  async function placeOrder() {
+    const id = document.getElementById("orderProductId").value;
+    const el = document.getElementById("orderResult");
+    el.textContent = "호출 중...";
+    try {
+      const data = await callApi("/api/orders/" + id);
+      el.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      el.innerHTML = '<span class="err">실패: ' + e.message + "</span>";
+    }
+  }
+
+  async function hammer() {
+    const el = document.getElementById("hammerResult");
+    el.textContent = "호출 중...";
+    try {
+      const pods = [];
+      for (let i = 0; i < 5; i++) {
+        const data = await callApi("/api/products/1");
+        pods.push(data.servedBy);
+      }
+      el.textContent = "응답한 Pod 순서:\n" + pods.join("\n");
+    } catch (e) {
+      el.innerHTML = '<span class="err">실패: ' + e.message + "</span>";
+    }
+  }
+</script>
+</body>
+</html>
