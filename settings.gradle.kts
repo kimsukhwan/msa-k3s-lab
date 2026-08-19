@@ -1,3 +1,3 @@
 rootProject.name = "msa-k3s-lab"
 
-include("gateway", "order-service", "product-service")
+include("gateway", "order-service", "product-service", "auth-service")

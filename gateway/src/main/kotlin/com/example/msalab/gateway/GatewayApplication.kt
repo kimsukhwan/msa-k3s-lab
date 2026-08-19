@@ -23,6 +23,13 @@ class GatewayApplication {
             .baseUrl(props.productServiceUrl)
             .requestInterceptor(CorrelationPropagationInterceptor())
             .build()
+
+    @Bean("authServiceClient")
+    fun authServiceClient(props: BackendProperties): RestClient =
+        RestClient.builder()
+            .baseUrl(props.authServiceUrl)
+            .requestInterceptor(CorrelationPropagationInterceptor())
+            .build()
 }
 
 fun main(args: Array<String>) {

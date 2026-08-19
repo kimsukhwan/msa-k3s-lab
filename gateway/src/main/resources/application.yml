@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URL:http://localhost:8094/.well-known/jwks.json}
 
 management:
   endpoints:
@@ -14,3 +19,4 @@ management:
 backend:
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8092}
   product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8091}
+  auth-service-url: ${AUTH_SERVICE_URL:http://localhost:8094}

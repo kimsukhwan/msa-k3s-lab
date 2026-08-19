@@ -1,0 +1,12 @@
+server:
+  port: 8094
+
+spring:
+  application:
+    name: auth-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health

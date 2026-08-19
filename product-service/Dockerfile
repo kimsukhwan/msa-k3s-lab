@@ -8,6 +8,7 @@ COPY gradle gradle
 COPY product-service product-service
 COPY order-service order-service
 COPY gateway gateway
+COPY auth-service auth-service
 RUN ./gradlew :product-service:bootJar -x test --no-daemon
 
 FROM eclipse-temurin:25-jre

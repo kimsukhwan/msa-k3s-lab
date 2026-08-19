@@ -170,3 +170,36 @@ flowchart LR
   응답의 `source` 필드가 `redis-cache`/`origin` 으로 표시되므로 화면에서 두 번 연속 조회해보면
   차이가 바로 보인다. **Redis가 죽어도 조회는 원장으로 계속 동작한다** — 캐시는 가속 장치이지
   의존성이 아니다.
+
+## 8. 인증 — 로그인부터 401까지 (JWKS 패턴)
+
+실서비스의 "슈퍼앱 → BFF 진입 → 토큰 검증 → 분기" 구조를 웹 페이지로 축소한 것입니다.
+**인증 경계는 gateway 하나** — 통과한 요청만 하위 서비스로 내려가고, order/product는
+토큰을 다시 검사하지 않습니다(클러스터 내부 신뢰).
+
+```mermaid
+sequenceDiagram
+    participant R as React (웹)
+    participant G as gateway :8093
+    participant A as auth-service :8094
+    participant O as order-service
+
+    R->>G: ① POST /api/auth/login (demo/demo1234)
+    G->>A: 그대로 전달 (인증 면제 경로)
+    A-->>R: ② RS256 JWT (30분)
+    Note over G,A: gateway는 A의 /.well-known/jwks.json에서<br/>공개키를 받아 캐시해 둔다
+    R->>G: ③ GET /api/orders/2 + Authorization: Bearer
+    G->>G: ④ JWKS 공개키로 서명·만료 검증
+    G->>O: ⑤ 통과한 요청만 라우팅
+    R->>G: (토큰 없이 호출하면) ⑥ 401
+```
+
+- **JWKS의 요점** — auth-service는 개인키로 서명만 하고, gateway는 `/.well-known/jwks.json`의
+  **공개키로 검증만** 한다. 두 서비스가 비밀을 공유하지 않으므로 검증측이 늘어나도(모바일 BFF,
+  외부 BFF…) 키 배포 문제가 없다. 실서비스에서 슈퍼앱 BFF가 같은 방식으로 검증하는 이유.
+- **왜 gateway에서만 검증하나** — 토큰 검사를 서비스마다 반복하면 모든 서비스가 auth를 의존하게
+  된다. 외부 진입점이 gateway 하나뿐이므로(order/product는 ClusterIP) 경계 한 곳 검증으로 충분하다.
+- **랩의 제약** — auth-service의 서명키는 파드 메모리에만 있어 replica 1 고정이고, 재기동하면
+  기존 토큰이 전부 무효가 된다(재로그인). 실서비스는 키를 공유 저장소에 두고 kid 기반으로 회전한다.
+- 화면에서 해볼 것: 로그인 없이 주문 → **401**, 로그인 후 주문 → 정상. auth-service 파드를
+  지워 재기동시킨 뒤 기존 토큰으로 호출 → 401(키 교체 체험).

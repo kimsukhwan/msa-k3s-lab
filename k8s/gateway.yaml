@@ -25,6 +25,10 @@ spec:
               value: "http://order-service:8092"
             - name: PRODUCT_SERVICE_URL
               value: "http://product-service:8091"
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service:8094"
+            - name: AUTH_JWKS_URL
+              value: "http://auth-service:8094/.well-known/jwks.json"
           readinessProbe:
             httpGet:
               path: /api/health
