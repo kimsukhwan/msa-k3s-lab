@@ -1,0 +1,10 @@
+server:
+  port: 8093
+
+spring:
+  application:
+    name: gateway
+
+backend:
+  order-service-url: ${ORDER_SERVICE_URL:http://localhost:8092}
+  product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8091}

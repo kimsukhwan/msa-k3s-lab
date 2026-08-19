@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  labels:
+    app: order-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+        - name: order-service
+          image: msa-lab/order-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8092
+          env:
+            # product-service를 IP가 아니라 k8s Service 이름으로 찾는다 — CoreDNS가 자동 변환한다.
+            - name: PRODUCT_SERVICE_BASE_URL
+              value: "http://product-service:8091"
+          readinessProbe:
+            httpGet:
+              path: /orders/health
+              port: 8092
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /orders/health
+              port: 8092
+            initialDelaySeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+spec:
+  selector:
+    app: order-service
+  ports:
+    - port: 8092
+      targetPort: 8092

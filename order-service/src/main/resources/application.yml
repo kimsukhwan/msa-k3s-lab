@@ -1,0 +1,9 @@
+server:
+  port: 8092
+
+spring:
+  application:
+    name: order-service
+
+product-service:
+  base-url: ${PRODUCT_SERVICE_BASE_URL:http://localhost:8091}
