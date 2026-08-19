@@ -5,12 +5,6 @@ plugins {
     id("io.spring.dependency-management")
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
-    }
-}
-
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -21,6 +15,7 @@ dependencies {
 }
 
 kotlin {
+    jvmToolchain(25)
     compilerOptions {
         freeCompilerArgs.add("-Xjsr305=strict")
     }
