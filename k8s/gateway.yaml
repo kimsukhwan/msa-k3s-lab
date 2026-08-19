@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: ghcr.io/kimsukhwan/msa-k3s-lab-gateway:00c6889c1bda86868becd8b44eb0cba2108c8bd5
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-gateway:494e2df1998685ee0ee27a54209826ac9040fee2
           imagePullPolicy: Always
           ports:
             - containerPort: 8093
