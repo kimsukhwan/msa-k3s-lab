@@ -118,7 +118,28 @@ Spring Boot Actuator(/actuator/prometheus 엔드포인트로 지표 노출)
    - 최근 트레이스 테이블(Tempo) — Trace ID를 클릭하면 실제 span waterfall(어느 서비스가
      얼마나 걸렸는지)까지 볼 수 있다
 
-## 5. 다음 단계로 해볼만한 것
+## 5. 배포 흐름 (ArgoCD) — 코드가 어떻게 클러스터까지 도착하는가
+
+```mermaid
+flowchart LR
+    Dev["git push"] --> CI["GitHub Actions"]
+    CI -->|"① 빌드+테스트"| CI
+    CI -->|"② 이미지 push (amd64+arm64)"| GHCR["ghcr.io"]
+    CI -->|"③ k8s/*.yaml 이미지 태그를 커밋SHA로 갱신 후 push"| Git["GitHub 저장소"]
+    ArgoCD["ArgoCD (클러스터 안)"] -.주기적으로 감시.-> Git
+    ArgoCD -->|"④ 변경 감지 시 자동 apply"| K8s["k3d 클러스터"]
+    K8s -->|이미지 pull| GHCR
+```
+
+- ①②는 지금까지의 CI와 같다.
+- **③이 핵심이다** — ArgoCD는 git만 본다. 이미지가 ghcr에 새로 올라간 것 자체는
+  ArgoCD에게 아무 의미가 없다. `k8s/*.yaml`에 적힌 텍스트(이미지 태그)가 바뀌어야
+  "spec이 바뀌었다"고 인식한다. 그래서 CI가 `:latest`가 아니라 매번 새 커밋 SHA로
+  태그를 고쳐 쓰고 git에 커밋한다.
+- ④에서 사람이 `kubectl`을 칠 일이 없다 — ArgoCD가 스스로 git과 클러스터 상태를
+  비교하다가 다르면 동기화(`syncPolicy.automated`)한다.
+
+## 6. 다음 단계로 해볼만한 것
 
 - **트레이스와 로그 연결**: OTel agent가 남긴 `traceID`를 MDC에도 넣으면, 로그 한 줄 →
   버튼을 눌러 그 요청의 정확한 span waterfall로 바로 이동하는 것도 가능해진다

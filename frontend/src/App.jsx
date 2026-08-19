@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./App.css";
+import FlowDoc from "./FlowDoc.jsx";
 
 const GATEWAY_URL = "http://localhost:8888";
 const GRAFANA_URL = "http://localhost:3000";
@@ -81,10 +82,25 @@ export default function App() {
 
   const [productId, setProductId] = useState(1);
   const [orderProductId, setOrderProductId] = useState(2);
+  const [view, setView] = useState("demo");
 
   return (
     <div className="page">
       <h1>msa-k3s-lab — React + LGTM 데모</h1>
+
+      <nav className="tabs">
+        <button className={view === "demo" ? "tabOn" : ""} onClick={() => setView("demo")}>
+          데모
+        </button>
+        <button className={view === "flow" ? "tabOn" : ""} onClick={() => setView("flow")}>
+          흐름 설명 (FLOW.md)
+        </button>
+      </nav>
+
+      {view === "flow" && <FlowDoc />}
+
+      {view === "demo" && (
+        <>
       <p className="muted">
         버튼을 누를 때마다 브라우저가 actionId(UUID)를 새로 만들어 <code>X-Action-Id</code> 헤더로 보냅니다.
         gateway → order-service → product-service가 이 값을 그대로 전파하며 로그에 남기므로,
@@ -112,6 +128,8 @@ export default function App() {
         </div>
         <ResultBlock state={orderAction.state} />
       </ActionCard>
+        </>
+      )}
     </div>
   );
 }

@@ -238,7 +238,44 @@ npm run dev
 
 Gateway(`http://localhost:8888`)와 Grafana(`http://localhost:3000`)가 이미 떠 있어야 한다.
 
-## 11. 정리
+## 11. ArgoCD — git push만으로 자동 배포
+
+8번에서 설명한 "CD가 왜 자동으로 안 되는가"의 답이다. ArgoCD를 클러스터 안에 설치하면
+`kubectl set image`를 사람이 직접 안 쳐도 된다.
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side
+
+# 로컬 랩 전용 — 자체서명 인증서 대신 평문 HTTP로 접속하려고 설정
+kubectl -n argocd patch deployment argocd-server --type='json' \
+  -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--insecure"}]'
+
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+kubectl port-forward svc/argocd-server -n argocd 8081:80
+# http://localhost:8081  (admin / 위에서 뽑은 비밀번호)
+
+kubectl apply -f k8s/argocd/application.yaml
+```
+
+**왜 이미지 태그가 `latest`가 아니라 커밋 SHA로 바뀌는가**: ArgoCD는 git에 적힌 내용과
+클러스터의 실제 상태를 비교해서 다르면 동기화한다. 매니페스트가 항상 `:latest`라고
+적혀 있으면, 실제 이미지가 바뀌어도 git 쪽 텍스트는 그대로라 ArgoCD 입장에서는
+"바뀐 게 없다"— 그래서 `.github/workflows/ci-cd.yaml`의 `bump-manifests` job이 이미지를
+push한 뒤 `k8s/*.yaml`의 태그를 그 커밋 SHA로 고쳐서 **다시 git에 커밋**한다. 이 커밋이
+있어야 ArgoCD가 "spec이 바뀌었다"고 인식해 동기화한다(next.msa의
+`bump-image-tag.sh` → `newTag` 갱신과 똑같은 패턴).
+
+**전체 흐름**: 코드 push → CI 빌드/테스트 → ghcr.io에 이미지 push(amd64+arm64 멀티아키텍처 —
+GitHub 러너는 amd64, 로컬 k3d는 Apple Silicon이라 둘 다 필요하다) → CI가 `k8s/*.yaml`의
+태그를 커밋 SHA로 바꿔 git에 push → **ArgoCD가 git 변경을 감지해 자동으로 클러스터에 반영**.
+사람이 `kubectl`을 칠 일이 하나도 없다.
+
+ArgoCD 대시보드에서 Application을 열면 Sync 상태(Synced/OutOfSync)와 Health 상태
+(Healthy/Progressing/Degraded), 그리고 리소스 트리(Deployment→ReplicaSet→Pod)를
+실시간으로 볼 수 있다.
+
+## 12. 정리
 
 ```bash
 k3d cluster delete msa-lab
