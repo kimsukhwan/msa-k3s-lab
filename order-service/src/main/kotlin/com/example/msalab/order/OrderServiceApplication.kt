@@ -12,7 +12,10 @@ class OrderServiceApplication {
 
     @Bean
     fun productServiceClient(props: ProductServiceProperties): RestClient =
-        RestClient.builder().baseUrl(props.baseUrl).build()
+        RestClient.builder()
+            .baseUrl(props.baseUrl)
+            .requestInterceptor(CorrelationPropagationInterceptor())
+            .build()
 }
 
 fun main(args: Array<String>) {

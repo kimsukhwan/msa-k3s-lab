@@ -160,8 +160,74 @@ ArgoCD가 git 저장소를 스스로 지켜보다가 `newTag`가 바뀌면 클�
 당겨와 반영합니다(사람이 직접 `kubectl set image`를 안 침). 이 랩에서 그
 차이를 직접 겪어보는 게 오히려 학습 포인트입니다.
 
-## 9. 정리
+## 9. LGTM 스택 (로그·트레이스·메트릭)
+
+`k8s/lgtm/`에 매니페스트/values가 있다. 이미 이 클러스터에는 설치되어 있고,
+다시 만들 때는 아래 순서대로:
+
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+helm install tempo grafana/tempo                                     # 트레이스, 기본값 그대로 OTLP(4317/4318) 수신
+kubectl apply -f k8s/lgtm/mimir.yaml                                  # 메트릭 저장 (단일 프로세스, filesystem)
+kubectl apply -f k8s/lgtm/prometheus-agent.yaml                       # 3개 서비스 스크레이프 -> mimir remote_write
+helm install loki grafana/loki-stack -f k8s/lgtm/loki-stack-values.yaml  # 로그(Loki+Promtail) + Grafana(+datasource 3개)
+```
+
+Grafana 접속:
+
+```bash
+kubectl port-forward svc/loki-grafana 3000:80
+# http://localhost:3000  (admin / admin)
+```
+
+**각 조각이 하는 일**
+
+| | 역할 | 비고 |
+|---|---|---|
+| Promtail | 각 Pod의 stdout을 긁어서 Loki로 전송 | DaemonSet, loki-stack이 자동 설치 |
+| Loki | 로그 저장/검색 (LogQL) | filesystem 저장, 단일 replica |
+| Tempo | 분산 트레이싱 저장/검색 | OTel Java agent가 각 서비스에 이미 붙어 있어 코드 변경 없이 자동 계측됨 |
+| Mimir | 메트릭 저장 (Prometheus 호환) | mimir-distributed 헬름차트는 단일 프로세스 모드가 없어서 직접 최소 구성함 |
+| Prometheus agent | 3개 서비스 `/actuator/prometheus`를 스크레이프해 Mimir로 push | agent 모드라 자체 조회 기능 없음 |
+| Grafana | Loki/Tempo/Mimir 3개 데이터소스로 조회 | `k8s/lgtm/loki-stack-values.yaml`이 자동 프로비저닝 |
+
+**actionId로 로그 상관관계 확인 — "버튼 단위" 로깅**
+
+3개 서비스 모두 `CorrelationFilter`(각 서비스 소스 참고)가:
+1. 들어온 요청의 `X-Action-Id` 헤더를 읽는다(없으면 새로 만듦)
+2. 이 hop 전용 `requestId`를 매번 새로 만든다
+3. 하위 서비스 호출 시 `X-Action-Id`를 그대로 실어 보낸다(`CorrelationPropagationInterceptor`)
+4. 로그를 JSON으로 남긴다(`logback-spring.xml` — `logstash-logback-encoder`)
+
+즉 **actionId는 요청 전체에서 안 바뀌고, requestId는 서비스를 거칠 때마다 바뀐다.**
+Grafana Explore에서 다음 LogQL로 한 번의 클릭이 남긴 3개 서비스 로그를 전부 볼 수 있다:
+
+```
+{namespace="default"} |= "<actionId>"
+```
+
+## 10. React 프론트엔드
+
+`frontend/`는 Vite + React 앱이다. 버튼을 누를 때마다 `crypto.randomUUID()`로
+actionId를 새로 만들어 `X-Action-Id` 헤더로 gateway에 보내고, 응답 아래에
+"Grafana에서 이 클릭의 로그 보기" 링크를 띄운다 — 클릭 한 번으로 그 클릭이 남긴
+3개 서비스 로그만 걸러서 바로 보여준다.
+
+```bash
+cd frontend
+npm install
+npm run dev
+# http://localhost:5173
+```
+
+Gateway(`http://localhost:8888`)와 Grafana(`http://localhost:3000`)가 이미 떠 있어야 한다.
+
+## 11. 정리
 
 ```bash
 k3d cluster delete msa-lab
 ```
+
+(클러스터를 지우면 LGTM 스택도 함께 사라진다 — 위 9번 명령으로 다시 설치.)

@@ -5,5 +5,11 @@ spring:
   application:
     name: order-service
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health
+
 product-service:
   base-url: ${PRODUCT_SERVICE_BASE_URL:http://localhost:8091}

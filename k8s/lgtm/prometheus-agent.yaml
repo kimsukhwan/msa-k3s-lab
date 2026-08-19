@@ -1,0 +1,64 @@
+# Mimir는 push(remote_write)로만 데이터를 받는다 — 누군가는 앱을 스크레이핑해서 밀어넣어야 한다.
+# agent 모드 Prometheus가 그 역할(스크레이프 + remote_write)만 하고 자체 조회 기능은 안 쓴다.
+# 참고: Service(ClusterIP)를 스크레이프 대상으로 쓰면 replica 2개 중 하나만 랜덤으로 잡힌다 —
+# Pod 단위로 정확히 잡으려면 kubernetes_sd_configs(role: pod)가 필요하지만 랩 목적엔 과함.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-agent-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+
+    scrape_configs:
+      - job_name: gateway
+        metrics_path: /actuator/prometheus
+        static_configs:
+          - targets: ["gateway:8093"]
+      - job_name: order-service
+        metrics_path: /actuator/prometheus
+        static_configs:
+          - targets: ["order-service:8092"]
+      - job_name: product-service
+        metrics_path: /actuator/prometheus
+        static_configs:
+          - targets: ["product-service:8091"]
+
+    remote_write:
+      - url: http://mimir:9009/api/v1/push
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-agent
+  labels:
+    app: prometheus-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-agent
+  template:
+    metadata:
+      labels:
+        app: prometheus-agent
+    spec:
+      containers:
+        - name: prometheus-agent
+          image: prom/prometheus:latest
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --agent
+            - --storage.agent.path=/prometheus-agent-data
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus-agent-data
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-agent-config
+        - name: data
+          emptyDir: {}

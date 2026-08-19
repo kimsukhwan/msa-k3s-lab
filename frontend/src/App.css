@@ -1,0 +1,72 @@
+.page {
+  max-width: 760px;
+  margin: 40px auto;
+  padding: 0 16px;
+  text-align: left;
+  font-family: -apple-system, sans-serif;
+  color: #222;
+}
+h1 {
+  font-size: 20px;
+}
+.muted {
+  font-size: 13px;
+  color: #888;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  align-items: center;
+}
+input {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  width: 60px;
+}
+button {
+  padding: 6px 14px;
+  border: 1px solid #666;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+button:hover {
+  background: #f0f0f0;
+}
+pre {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 13px;
+}
+.card {
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 16px 0;
+  text-align: left;
+}
+.err {
+  color: #c0392b;
+}
+.actionRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.badge {
+  display: inline-block;
+  background: #eef;
+  color: #333;
+  padding: 2px 8px;
+  border-radius: 12px;
+  width: fit-content;
+  word-break: break-all;
+}

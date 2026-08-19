@@ -1,0 +1,30 @@
+# helm install loki grafana/loki-stack -f k8s/lgtm/loki-stack-values.yaml
+# 릴리즈 이름이 "loki"라 Loki 자체 Service 이름도 "loki:3100"이 된다(차트 컨벤션).
+loki:
+  enabled: true
+
+promtail:
+  enabled: true
+
+grafana:
+  enabled: true
+  adminPassword: admin
+  service:
+    type: ClusterIP
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki:3100
+          isDefault: true
+        - name: Tempo
+          type: tempo
+          access: proxy
+          url: http://tempo:3200
+        - name: Mimir
+          type: prometheus
+          access: proxy
+          url: http://mimir:9009/prometheus

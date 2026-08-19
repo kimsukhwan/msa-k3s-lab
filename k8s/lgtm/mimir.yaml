@@ -1,0 +1,102 @@
+# Mimir는 mimir-distributed(공식 헬름차트)가 단일 프로세스 모드를 지원하지 않아서
+# (마이크로서비스 여러 개를 강제로 띄움) 랩 목적으로 직접 최소 구성했다.
+# 참고: https://grafana.com/docs/mimir/latest/get-started/ 의 monolithic 예시(-target=all)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-config
+data:
+  mimir.yaml: |
+    # 데모/랩 전용 설정 — 운영에는 쓰지 않는다.
+    multitenancy_enabled: false
+
+    blocks_storage:
+      backend: filesystem
+      bucket_store:
+        sync_dir: /data/mimir/tsdb-sync
+      filesystem:
+        dir: /data/mimir/data/tsdb
+      tsdb:
+        dir: /data/mimir/tsdb
+
+    compactor:
+      data_dir: /data/mimir/compactor
+      sharding_ring:
+        kvstore:
+          store: memberlist
+
+    distributor:
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: memberlist
+
+    ingester:
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: memberlist
+        replication_factor: 1
+
+    ruler_storage:
+      backend: filesystem
+      filesystem:
+        dir: /data/mimir/rules
+
+    server:
+      http_listen_port: 9009
+      log_level: error
+
+    store_gateway:
+      sharding_ring:
+        replication_factor: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir
+  labels:
+    app: mimir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mimir
+  template:
+    metadata:
+      labels:
+        app: mimir
+    spec:
+      containers:
+        - name: mimir
+          image: grafana/mimir:latest
+          args: ["-target=all", "-config.file=/etc/mimir/mimir.yaml"]
+          ports:
+            - containerPort: 9009
+          volumeMounts:
+            - name: config
+              mountPath: /etc/mimir
+            - name: data
+              mountPath: /data/mimir
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9009
+            initialDelaySeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: mimir-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir
+spec:
+  selector:
+    app: mimir
+  ports:
+    - port: 9009
+      targetPort: 9009

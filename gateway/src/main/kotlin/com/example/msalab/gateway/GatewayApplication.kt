@@ -12,11 +12,17 @@ class GatewayApplication {
 
     @Bean("orderServiceClient")
     fun orderServiceClient(props: BackendProperties): RestClient =
-        RestClient.builder().baseUrl(props.orderServiceUrl).build()
+        RestClient.builder()
+            .baseUrl(props.orderServiceUrl)
+            .requestInterceptor(CorrelationPropagationInterceptor())
+            .build()
 
     @Bean("productServiceClient")
     fun productServiceClient(props: BackendProperties): RestClient =
-        RestClient.builder().baseUrl(props.productServiceUrl).build()
+        RestClient.builder()
+            .baseUrl(props.productServiceUrl)
+            .requestInterceptor(CorrelationPropagationInterceptor())
+            .build()
 }
 
 fun main(args: Array<String>) {
