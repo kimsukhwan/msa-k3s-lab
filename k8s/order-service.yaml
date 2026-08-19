@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: order-service
-          image: ghcr.io/kimsukhwan/msa-k3s-lab-order-service:8f2d4529212356832c43c2b8c56f9e0dff92e45c
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-order-service:00c6889c1bda86868becd8b44eb0cba2108c8bd5
           imagePullPolicy: Always
           ports:
             - containerPort: 8092
