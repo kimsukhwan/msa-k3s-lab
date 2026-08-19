@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: order-service
-          image: msa-lab/order-service:local
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-order-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8092
           env:

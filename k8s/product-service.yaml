@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: product-service
-          image: msa-lab/product-service:local
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-product-service:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8091
           readinessProbe:

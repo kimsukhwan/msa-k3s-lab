@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: msa-lab/gateway:local
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-gateway:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8093
           env:
