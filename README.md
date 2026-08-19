@@ -17,7 +17,9 @@ k8s/MSA를 처음 배우기 위한 **연습용** 프로젝트입니다. next.msa
 
 ## 0. 사전 준비
 
-이미 설치됨: `k3d`, `kubectl`, `helm`, `gh` (Homebrew), Java 21 (`openjdk@21`).
+이미 설치됨: `k3d`, `kubectl`, `helm`, `gh` (Homebrew), Java 25.
+(Kotlin 2.3.0 / Spring Boot 3.5.16 / Gradle 9.7.0부터 JDK 25 빌드·실행을 지원한다 —
+그 이전 버전 조합에서는 `Unsupported class file major version 69` 에러가 난다.)
 
 **Docker Desktop만 직접 설치해주세요** — 설치 중 관리자 암호 입력이 필요해서
 자동화할 수 없었습니다.
@@ -34,7 +36,7 @@ brew install --cask docker
 가장 빠른 피드백 루프입니다. 터미널 3개를 열고:
 
 ```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export JAVA_HOME=$(/usr/libexec/java_home -v 25)
 ./gradlew :product-service:bootRun   # 터미널 1
 ./gradlew :order-service:bootRun     # 터미널 2
 ./gradlew :gateway:bootRun           # 터미널 3
@@ -181,6 +183,18 @@ Grafana 접속:
 kubectl port-forward svc/loki-grafana 3000:80
 # http://localhost:3000  (admin / admin)
 ```
+
+**대시보드**: `k8s/lgtm/grafana-dashboard.json`을 아래처럼 넣으면 서비스 상태·요청량·
+실시간 로그·최근 트레이스를 한 화면에서 보는 대시보드가 생긴다.
+
+```bash
+curl -s -u admin:admin -X POST -H "Content-Type: application/json" \
+  -d @k8s/lgtm/grafana-dashboard.json \
+  http://localhost:3000/api/dashboards/db
+# http://localhost:3000/d/msa-lgtm-overview
+```
+
+전체 요청·관측 흐름을 그림과 함께 설명한 문서는 [FLOW.md](./FLOW.md) 참고.
 
 **각 조각이 하는 일**
 
