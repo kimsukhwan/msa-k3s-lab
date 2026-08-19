@@ -5,6 +5,7 @@
             <includeMdcKeyName>actionId</includeMdcKeyName>
             <includeMdcKeyName>requestId</includeMdcKeyName>
             <includeMdcKeyName>channel</includeMdcKeyName>
+            <includeMdcKeyName>custId</includeMdcKeyName>
         </encoder>
     </appender>
 

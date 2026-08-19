@@ -10,7 +10,12 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
 
 data class LoginRequest(val username: String, val password: String)
-data class TokenResponse(val accessToken: String, val tokenType: String = "Bearer", val expiresInSeconds: Long)
+data class TokenResponse(
+    val accessToken: String,
+    val tokenType: String = "Bearer",
+    val expiresInSeconds: Long,
+    val custKey: String,
+)
 
 @RestController
 class AuthController(
@@ -19,21 +24,49 @@ class AuthController(
 ) {
     private val log = LoggerFactory.getLogger(AuthController::class.java)
 
-    // 랩 데모 계정 — 실서비스라면 사용자 저장소의 BCrypt 해시와 비교한다.
-    private val demoUsers = mapOf("demo" to "demo1234", "kim" to "kim1234")
+    data class DemoUser(val password: String, val custKey: String)
+
+    // 랩 데모 계정 — 실서비스라면 슈퍼앱 쪽 사용자 저장소가 하는 일이다.
+    // guest 는 은행에 매핑이 없는 고객키(SA-99999)를 갖는다 — fail-closed 시연용.
+    private val demoUsers = mapOf(
+        "demo" to DemoUser("demo1234", "SA-10001"),
+        "kim" to DemoUser("kim1234", "SA-10002"),
+        "guest" to DemoUser("guest1234", "SA-99999"),
+    )
 
     @PostMapping("/auth/login")
     fun login(@RequestBody request: LoginRequest): ResponseEntity<Any> {
-        if (demoUsers[request.username] != request.password) {
+        val user = demoUsers[request.username]
+        if (user == null || user.password != request.password) {
             log.info("로그인 실패 username={}", request.username)
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(mapOf("error" to "아이디 또는 비밀번호가 올바르지 않습니다"))
         }
-        log.info("로그인 성공 — 토큰 발급 username={}", request.username)
+        log.info("로그인 성공 — 은행용(aud={}) 토큰 발급 username={} custKey={}", JwtIssuer.BANK_AUDIENCE, request.username, user.custKey)
         return ResponseEntity.ok(
             TokenResponse(
-                accessToken = jwtIssuer.issue(request.username),
+                accessToken = jwtIssuer.issue(request.username, user.custKey),
                 expiresInSeconds = jwtIssuer.tokenTtl.seconds,
+                custKey = user.custKey,
+            ),
+        )
+    }
+
+    // 공격 시연용 — 같은 IdP 가 "다른 제휴사(partner-mall)용"으로 발급한 토큰.
+    // 서명은 진짜지만 aud 가 다르므로, 은행 gateway 의 aud 검증이 있어야만 재사용이 막힌다.
+    @PostMapping("/auth/demo-partner-token")
+    fun demoPartnerToken(@RequestBody request: LoginRequest): ResponseEntity<Any> {
+        val user = demoUsers[request.username]
+        if (user == null || user.password != request.password) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(mapOf("error" to "아이디 또는 비밀번호가 올바르지 않습니다"))
+        }
+        log.info("제휴사용(aud=partner-mall) 토큰 발급 — 재사용 공격 시연용 username={}", request.username)
+        return ResponseEntity.ok(
+            TokenResponse(
+                accessToken = jwtIssuer.issue(request.username, user.custKey, audience = "partner-mall"),
+                expiresInSeconds = jwtIssuer.tokenTtl.seconds,
+                custKey = user.custKey,
             ),
         )
     }

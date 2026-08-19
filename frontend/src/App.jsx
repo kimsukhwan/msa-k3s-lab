@@ -83,7 +83,7 @@ function LoginCard({ auth, setAuth }) {
       if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
       currentToken = data.accessToken;
       const payload = decodeJwtPayload(data.accessToken);
-      setAuth({ sub: payload.sub, expiresAt: new Date(payload.exp * 1000) });
+      setAuth({ sub: payload.sub, custKey: payload.custKey, aud: payload.aud, expiresAt: new Date(payload.exp * 1000) });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -104,7 +104,12 @@ function LoginCard({ auth, setAuth }) {
           <span className="badge">로그인됨: {auth.sub} · 만료 {auth.expiresAt.toLocaleTimeString()}</span>
           <button onClick={logout}>로그아웃</button>
         </div>
-        <p className="muted">이후 모든 호출에 Authorization: Bearer 토큰이 실리고, gateway가 JWKS 공개키로 서명을 검증합니다.</p>
+        <p className="muted">
+          토큰 클레임 — custKey(슈퍼앱 고객키): <code>{auth.custKey}</code> · aud(수신자): <code>{auth.aud}</code>
+          <br />
+          이후 모든 호출에 Authorization: Bearer 토큰이 실리고, gateway가 JWKS로 서명을, aud로 "우리 시스템용인지"를 검증합니다.
+          검증을 통과하면 gateway가 custKey를 내부 고유키(custId)로 변환해 하위 서비스로 넘깁니다 — custKey 자체는 여기서 끝입니다.
+        </p>
       </div>
     );
   }
@@ -120,8 +125,67 @@ function LoginCard({ auth, setAuth }) {
       {error && <p className="err">{error}</p>}
       <p className="muted">
         로그인 없이 아래 버튼을 누르면 gateway가 401을 돌려줍니다 — 인증 경계가 gateway 하나라는 것을 보는 실험.
-        (데모 계정: demo / demo1234)
+        <br />
+        데모 계정: <code>demo/demo1234</code>, <code>kim/kim1234</code>(둘 다 내부 매핑 있음) ·{" "}
+        <code>guest/guest1234</code>(내부 매핑 <strong>없음</strong> — 로그인 후 주문/조회하면 403, fail-closed 시연)
       </p>
+    </div>
+  );
+}
+
+// "다른 제휴사(partner-mall)용으로 발급된, 서명은 진짜인 토큰"을 우리 API에 재사용하는 공격 시연.
+// aud 검증이 없으면 이 토큰도 통과해버린다 — SecurityConfig의 audienceValidator가 막는 지점이 이것.
+function AudienceAttackCard() {
+  const [username, setUsername] = useState("demo");
+  const [password, setPassword] = useState("demo1234");
+  const [result, setResult] = useState(null);
+
+  async function tryReuseAttack() {
+    setResult({ status: "loading" });
+    try {
+      const tokenRes = await fetch(GATEWAY_URL + "/api/auth/demo-partner-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) throw new Error(tokenData.error || "토큰 발급 실패");
+
+      const payload = decodeJwtPayload(tokenData.accessToken);
+      const apiRes = await fetch(GATEWAY_URL + "/api/products/1", {
+        headers: { Authorization: `Bearer ${tokenData.accessToken}` },
+      });
+      setResult({
+        status: "done",
+        aud: payload.aud,
+        httpStatus: apiRes.status,
+        blocked: !apiRes.ok,
+      });
+    } catch (e) {
+      setResult({ status: "error", error: e.message });
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>🧪 실험 — 다른 제휴사용 토큰 재사용 공격</h3>
+      <p className="muted">
+        같은 슈퍼앱 IdP가 <code>partner-mall</code>(가상의 다른 제휴사)용으로 서명한 토큰을 받아, 우리 은행 API(
+        <code>/api/products/1</code>)에 그대로 재사용해봅니다. 서명은 진짜입니다 — <strong>aud 검증이 있어야만</strong> 막힙니다.
+      </p>
+      <div className="row">
+        <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="아이디" />
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호" />
+        <button onClick={tryReuseAttack}>제휴사용 토큰으로 공격 시도</button>
+      </div>
+      {result?.status === "loading" && <p className="muted">시도 중...</p>}
+      {result?.status === "error" && <p className="err">{result.error}</p>}
+      {result?.status === "done" && (
+        <p className={result.blocked ? "ok" : "err"}>
+          토큰의 aud=<code>{result.aud}</code> (은행이 아님) → 응답 HTTP {result.httpStatus} —{" "}
+          {result.blocked ? "✅ 차단됨 (gateway의 audience 검증이 정상 동작)" : "🚨 통과됨 — aud 검증이 없다면 이렇게 뚫립니다"}
+        </p>
+      )}
     </div>
   );
 }
@@ -185,6 +249,7 @@ export default function App() {
       {view === "demo" && (
         <>
       <LoginCard auth={auth} setAuth={setAuth} />
+      <AudienceAttackCard />
       <p className="muted">
         버튼을 누를 때마다 브라우저가 actionId(UUID)를 새로 만들어 <code>X-Action-Id</code> 헤더로 보냅니다.
         gateway → order-service → product-service가 이 값을 그대로 전파하며 로그에 남기므로,

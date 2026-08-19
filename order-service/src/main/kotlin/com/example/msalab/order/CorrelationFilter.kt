@@ -18,10 +18,13 @@ class CorrelationFilter : OncePerRequestFilter() {
         val actionId = request.getHeader("X-Action-Id") ?: UUID.randomUUID().toString()
         val requestId = UUID.randomUUID().toString()
         val channel = request.getHeader("X-Channel") ?: "web"
+        // gateway가 JWT의 custKey를 검증·변환해 내려보낸 내부 고유키 — 원본 고객키는 여기 없다.
+        val custId = request.getHeader("X-Cust-Id")
 
         MDC.put("actionId", actionId)
         MDC.put("requestId", requestId)
         MDC.put("channel", channel)
+        custId?.let { MDC.put("custId", it) }
         response.setHeader("X-Action-Id", actionId)
 
         val start = System.currentTimeMillis()

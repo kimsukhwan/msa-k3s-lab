@@ -24,10 +24,18 @@ class GatewayController(
     // 로그인은 인증 없이 통과하는 유일한 업무 경로 — auth-service 로 그대로 전달한다.
     // 실패(401)도 본문 그대로 되돌려줘 프론트가 사유를 표시할 수 있게 한다.
     @PostMapping("/auth/login")
-    fun routeToLogin(@RequestBody body: Map<String, Any>): ResponseEntity<Any> =
+    fun routeToLogin(@RequestBody body: Map<String, Any>): ResponseEntity<Any> = proxyToAuth("/auth/login", body)
+
+    // 공격 시연 전용 — 같은 슈퍼앱 IdP가 "다른 제휴사(partner-mall)용"으로 서명한 토큰을 받아온다.
+    // 이 토큰으로 /api/orders 등을 호출하면 gateway의 audience 검증에서 401이 나야 정상이다.
+    @PostMapping("/auth/demo-partner-token")
+    fun routeToPartnerToken(@RequestBody body: Map<String, Any>): ResponseEntity<Any> =
+        proxyToAuth("/auth/demo-partner-token", body)
+
+    private fun proxyToAuth(path: String, body: Map<String, Any>): ResponseEntity<Any> =
         try {
             ResponseEntity.ok(
-                authServiceClient.post().uri("/auth/login").body(body).retrieve().body(Any::class.java)
+                authServiceClient.post().uri(path).body(body).retrieve().body(Any::class.java)
                     ?: emptyMap<String, Any>(),
             )
         } catch (e: HttpClientErrorException) {

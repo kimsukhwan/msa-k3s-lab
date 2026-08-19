@@ -54,6 +54,9 @@ pre {
 .err {
   color: #c0392b;
 }
+.ok {
+  color: #1e8449;
+}
 .actionRow {
   display: flex;
   flex-direction: column;
