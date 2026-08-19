@@ -33,23 +33,25 @@ function isMermaid(children) {
   return typeof child?.props?.className === "string" && child.props.className.includes("language-mermaid");
 }
 
-// FLOW.md(저장소 루트 → predev 훅이 public/ 으로 복사)를 읽어 보여주는 문서 화면.
-export default function FlowDoc() {
+// 저장소 루트의 md 문서(predev 훅이 public/ 으로 복사)를 읽어 보여주는 문서 화면.
+export default function FlowDoc({ file = "/FLOW.md" }) {
   const [flowMd, setFlowMd] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
-    fetch("/FLOW.md")
+    setFlowMd(null);
+    setLoadError(null);
+    fetch(file)
       .then((res) => {
         if (!res.ok) throw new Error("HTTP " + res.status);
         return res.text();
       })
       .then(setFlowMd)
       .catch((e) => setLoadError(e.message));
-  }, []);
+  }, [file]);
 
-  if (loadError) return <p className="err">FLOW.md 로드 실패: {loadError}</p>;
-  if (flowMd === null) return <p className="muted">FLOW.md 읽는 중...</p>;
+  if (loadError) return <p className="err">{file} 로드 실패: {loadError}</p>;
+  if (flowMd === null) return <p className="muted">{file} 읽는 중...</p>;
 
   return (
     <div className="doc">

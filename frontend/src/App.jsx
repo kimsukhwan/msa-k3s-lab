@@ -95,9 +95,13 @@ export default function App() {
         <button className={view === "flow" ? "tabOn" : ""} onClick={() => setView("flow")}>
           흐름 설명 (FLOW.md)
         </button>
+        <button className={view === "argocd" ? "tabOn" : ""} onClick={() => setView("argocd")}>
+          ArgoCD 화면 읽는 법
+        </button>
       </nav>
 
-      {view === "flow" && <FlowDoc />}
+      {view === "flow" && <FlowDoc file="/FLOW.md" />}
+      {view === "argocd" && <FlowDoc file="/ARGOCD.md" />}
 
       {view === "demo" && (
         <>
