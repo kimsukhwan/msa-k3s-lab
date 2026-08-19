@@ -24,6 +24,8 @@ spec:
             # product-service를 IP가 아니라 k8s Service 이름으로 찾는다 — CoreDNS가 자동 변환한다.
             - name: PRODUCT_SERVICE_BASE_URL
               value: "http://product-service:8091"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
           readinessProbe:
             httpGet:
               path: /orders/health

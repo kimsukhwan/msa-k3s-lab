@@ -14,6 +14,7 @@ data class OrderView(val orderId: Long, val product: ProductView, val orderedBy:
 @RequestMapping("/orders")
 class OrderController(
     private val productServiceClient: RestClient,
+    private val orderEventPublisher: OrderEventPublisher,
     @Value("\${HOSTNAME:local}") private val hostname: String,
 ) {
 
@@ -26,7 +27,19 @@ class OrderController(
             .body(ProductView::class.java)
             ?: error("product-service 응답 없음")
 
-        return OrderView(orderId = System.nanoTime() % 100000, product = product, orderedBy = hostname)
+        val order = OrderView(orderId = System.nanoTime() % 100000, product = product, orderedBy = hostname)
+
+        // 주문 확정 이벤트 — product-service 가 구독해 재고 차감을 시뮬레이션한다.
+        orderEventPublisher.publish(
+            OrderPlacedEvent(
+                orderId = order.orderId,
+                productId = product.id,
+                productName = product.name,
+                price = product.price,
+                orderedBy = hostname,
+            ),
+        )
+        return order
     }
 
     @GetMapping("/health")

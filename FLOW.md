@@ -147,3 +147,26 @@ flowchart LR
 - **Pod 단위 메트릭**: 지금은 Service를 스크레이프해서 replica 2개 중 하나만 잡힌다 —
   `kubernetes_sd_configs(role: pod)`로 바꾸면 Pod별로 다 잡을 수 있다.
 - **알림(Alerting)**: Mimir 지표 기준으로 "에러율 5% 초과 시 알림" 같은 룰을 Grafana에 걸어보기.
+
+## 7. 주문 이벤트와 캐시 — Kafka·Redis가 끼어드는 지점
+
+HTTP 요청-응답 체인(위 2절)에 두 가지 비동기/가속 장치가 추가됐습니다.
+
+```mermaid
+flowchart LR
+    ORD["order-service"] -->|"① 주문 확정 후 발행<br/>topic: order-events<br/>(X-Action-Id 헤더 포함)"| K["Kafka<br/>kafka:9092"]
+    K -->|"② 구독 (groupId: product-service)"| PRD["product-service<br/>재고 차감 시뮬레이션 로그"]
+    PRD2["product-service<br/>상품 조회"] -->|"③ 먼저 캐시 확인 (TTL 60초)"| R["Redis<br/>redis:6379"]
+    R -.->|"미스면 원장 조회 후 채움"| PRD2
+```
+
+- **주문 이벤트 (Kafka)** — order-service는 주문 응답을 돌려준 것과 별개로 `order-events` 토픽에
+  주문 사실을 발행한다. product-service가 이를 구독해 재고 차감을 시뮬레이션한다.
+  요청을 만든 actionId가 **Kafka 레코드 헤더(X-Action-Id)** 로도 전파되므로, Grafana에서
+  같은 actionId로 검색하면 HTTP hop 로그와 **비동기 hop 로그까지 한 줄에 묶인다** —
+  발행이 실패해도 주문 응답은 실패하지 않는다(경고 로그만 남음).
+- **상품 캐시 (Redis)** — product-service는 상품 조회 시 `product:{id}` 키를 먼저 본다.
+  적중하면 원장 조회(200ms 지연 시뮬레이션)를 건너뛰고, 미스면 원장을 읽어 60초 TTL로 채운다.
+  응답의 `source` 필드가 `redis-cache`/`origin` 으로 표시되므로 화면에서 두 번 연속 조회해보면
+  차이가 바로 보인다. **Redis가 죽어도 조회는 원장으로 계속 동작한다** — 캐시는 가속 장치이지
+  의존성이 아니다.

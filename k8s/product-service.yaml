@@ -18,6 +18,11 @@ spec:
         - name: product-service
           image: ghcr.io/kimsukhwan/msa-k3s-lab-product-service:00c6889c1bda86868becd8b44eb0cba2108c8bd5
           imagePullPolicy: Always
+          env:
+            - name: REDIS_HOST
+              value: redis
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
           ports:
             - containerPort: 8091
           readinessProbe:
