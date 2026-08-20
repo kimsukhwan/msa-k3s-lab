@@ -92,8 +92,17 @@ function LoginCard({ auth, setAuth }) {
   }
 
   function logout() {
+    // 클라이언트가 메모리에서 지우는 것과 별개로, 서버(gateway)에 이 토큰의 jti 를 폐기해달라고
+    // 요청한다 — 이게 없으면 "로그아웃"은 눈속임일 뿐, 유출된 토큰은 만료 전까지 계속 유효하다.
+    const oldToken = currentToken;
     currentToken = null;
     setAuth(null);
+    if (oldToken) {
+      fetch(GATEWAY_URL + "/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${oldToken}` },
+      }).catch(() => {});
+    }
   }
 
   if (auth) {
@@ -190,6 +199,71 @@ function AudienceAttackCard() {
   );
 }
 
+// JWT는 원래 무상태라 "발급 후 취소"가 안 된다 — 로그아웃해도 만료 전까지 토큰이 계속 유효할 수
+// 있다는 뜻이다. gateway의 jti 폐기 목록(Redis)이 이 빈틈을 메우는지 실측으로 보여준다.
+function RevocationAttackCard() {
+  const [username, setUsername] = useState("demo");
+  const [password, setPassword] = useState("demo1234");
+  const [result, setResult] = useState(null);
+
+  async function tryReplayAfterLogout() {
+    setResult({ status: "loading" });
+    try {
+      const loginRes = await fetch(GATEWAY_URL + "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const loginData = await loginRes.json();
+      if (!loginRes.ok) throw new Error(loginData.error || "로그인 실패");
+      const token = loginData.accessToken;
+
+      const beforeRes = await fetch(GATEWAY_URL + "/api/products/1", { headers: { Authorization: `Bearer ${token}` } });
+      const logoutRes = await fetch(GATEWAY_URL + "/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // 로그아웃 후에도 "같은" 토큰을 그대로 들고 재사용 시도 — 폐기 목록이 있어야만 막힌다
+      const afterRes = await fetch(GATEWAY_URL + "/api/products/1", { headers: { Authorization: `Bearer ${token}` } });
+
+      setResult({
+        status: "done",
+        beforeStatus: beforeRes.status,
+        logoutStatus: logoutRes.status,
+        afterStatus: afterRes.status,
+        blocked: !afterRes.ok,
+      });
+    } catch (e) {
+      setResult({ status: "error", error: e.message });
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>🧪 실험 — 로그아웃 후 같은 토큰 재사용</h3>
+      <p className="muted">
+        로그인 → 정상 호출 → 로그아웃 → <strong>같은 토큰</strong>으로 다시 호출을 시도합니다. 서명·만료는
+        여전히 유효한 토큰이라, jti 폐기 목록이 없다면 로그아웃은 클라이언트만 잊어버리는 눈속임에
+        불과합니다.
+      </p>
+      <div className="row">
+        <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="아이디" />
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호" />
+        <button onClick={tryReplayAfterLogout}>로그인 → 로그아웃 → 재사용 시도</button>
+      </div>
+      {result?.status === "loading" && <p className="muted">시도 중...</p>}
+      {result?.status === "error" && <p className="err">{result.error}</p>}
+      {result?.status === "done" && (
+        <p className={result.blocked ? "ok" : "err"}>
+          로그아웃 전 호출 {result.beforeStatus} · 로그아웃 {result.logoutStatus} · 로그아웃 후 같은 토큰 재호출{" "}
+          {result.afterStatus} —{" "}
+          {result.blocked ? "✅ 차단됨 (jti 폐기 목록 정상 동작)" : "🚨 통과됨 — 폐기 목록이 없다면 이렇게 뚫립니다"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ActionCard({ title, children }) {
   return (
     <div className="card">
@@ -250,6 +324,7 @@ export default function App() {
         <>
       <LoginCard auth={auth} setAuth={setAuth} />
       <AudienceAttackCard />
+      <RevocationAttackCard />
       <p className="muted">
         버튼을 누를 때마다 브라우저가 actionId(UUID)를 새로 만들어 <code>X-Action-Id</code> 헤더로 보냅니다.
         gateway → order-service → product-service가 이 값을 그대로 전파하며 로그에 남기므로,

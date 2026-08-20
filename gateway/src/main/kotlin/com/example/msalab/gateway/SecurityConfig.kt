@@ -60,8 +60,10 @@ class SecurityConfig(
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests {
                 it
-                    // 로그인과 상태 확인은 토큰 없이 — 그 외 /api/** 는 전부 토큰 필수
-                    .requestMatchers("/api/auth/**", "/api/health", "/actuator/**").permitAll()
+                    // 로그인·상태 확인만 토큰 없이 통과 — /api/auth/logout 은 의도적으로 여기 없다
+                    // (로그아웃은 그 토큰 자신의 jti 를 폐기하는 동작이라 유효한 토큰이 있어야 부를 수 있다).
+                    // 그 외 /api/** 는 전부 토큰 필수.
+                    .requestMatchers("/api/auth/login", "/api/auth/demo-partner-token", "/api/health", "/actuator/**").permitAll()
                     .anyRequest().authenticated()
             }
             .oauth2ResourceServer { it.jwt { } }

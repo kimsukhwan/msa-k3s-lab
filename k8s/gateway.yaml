@@ -29,6 +29,8 @@ spec:
               value: "http://auth-service:8094"
             - name: AUTH_JWKS_URL
               value: "http://auth-service:8094/.well-known/jwks.json"
+            - name: REDIS_HOST
+              value: redis
           readinessProbe:
             httpGet:
               path: /api/health

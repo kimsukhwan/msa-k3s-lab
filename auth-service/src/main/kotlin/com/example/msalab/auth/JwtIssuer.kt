@@ -36,6 +36,10 @@ class JwtIssuer {
             .issuer("superapp-idp")
             .audience(audience)
             .claim("custKey", custKey)
+            // jti — 토큰 하나하나를 구분하는 고유 ID. JWT는 태생적으로 무상태라 발급 후 "취소"가
+            // 안 되는데, 검증측(gateway)이 jti 단위로 폐기 목록을 두면 로그아웃을 만료 전에도
+            // 즉시 반영할 수 있다.
+            .jwtID(UUID.randomUUID().toString())
             .issueTime(now)
             .expirationTime(Date(now.time + tokenTtl.toMillis()))
             .build()
