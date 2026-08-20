@@ -73,7 +73,7 @@ flowchart TB
 ### 고객 (슈퍼앱)
 
 ```
-슈퍼앱 → 채널BFF(AWS, 1차 검증) → DX → L4(mTLS 종료 ← 옵션 ① 채택) → Envoy Gateway → gateway → Layer B
+슈퍼앱 → 채널BFF(AWS, 1차 검증) → DX → L4(mTLS 종료 — 옵션 ①) → Envoy Gateway → gateway → Layer B
 ```
 
 - 토큰은 **슈퍼앱이 발급**한다 — 우리는 슈퍼앱 JWKS 공개키로 **검증만** 한다(발급 불가).
@@ -172,5 +172,5 @@ flowchart LR
 | DB | 외부 VM Patroni HA | 컨테이너 단일 인스턴스 |
 | 도메인 서비스 | 8개 | 2개 (order/product) |
 
-랩 자체의 배선과 검증 절차는 **"흐름 설명 (FLOW.md)" 탭**, mTLS 옵션 비교와 채택 근거는
+랩 자체의 배선과 검증 절차는 **"흐름 설명 (FLOW.md)" 탭**, mTLS 옵션 비교와 검토 근거는
 **"mTLS 검토안" 탭** 참고.

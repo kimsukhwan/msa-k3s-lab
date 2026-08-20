@@ -2,9 +2,9 @@
 
 근거 문서: `infra/architecture.drawio`(next.msa 실제 설계) · 비교 대상: `msa-k3s-lab`(로컬 검증 랩)
 
-현재 상태: **옵션 ① — L4(NetScaler MPX 9230)에서 종료 — 채택 확정(2026-08-20)**.
+현재 상태: 옵션 ①의 전제조건인 **L4 장비(NetScaler MPX 9230) 지원 여부 확인 완료(2026-08-20)**.
 architecture.drawio에는 아직 mTLS가 반영돼 있지 않았고, 이 문서는 넣을지 말지부터
-검토해 실제 장비로 지원 여부까지 확인한 과정과 결론을 정리한 것이다.
+검토해 실제 장비로 지원 여부까지 확인한 과정을 정리한 것이다.
 
 ## 1. 배경
 
@@ -49,7 +49,7 @@ flowchart TB
     ENVOY --> GW
     GW --> SVC
 
-    OPT1["옵션 ① 여기서 종료 ✅ 채택<br/>전용 VIP + 클라이언트 인증서 정책"]
+    OPT1["옵션 ① 여기서 종료<br/>전용 VIP + 클라이언트 인증서 정책"]
     OPT2["옵션 ② 여기서 종료<br/>L4는 패스스루로 전환"]
     OPT3["옵션 ③ 여기서 종료<br/>전용 네트워크 경로 신설"]
 
@@ -63,7 +63,7 @@ flowchart TB
 
 ## 4. 옵션별 비교
 
-### 옵션 ① — L4 로드밸런서에서 종료 ✅ 채택 (변경 범위: 최소)
+### 옵션 ① — L4 로드밸런서에서 종료 (변경 범위: 최소)
 
 - **방법**: 슈퍼앱 전용 VIP 신설 → 그 리스너에만 클라이언트 인증서 요구 → 검증된 CN을
   헤더로 하위 전달(예: `X-Client-Cert-CN`) → 원본 요청에 같은 헤더가 있으면 L4가
@@ -111,7 +111,7 @@ flowchart TB
 | 원본 요청에 같은 헤더가 있으면 제거(sanitize) | ✅ 지원 — Rewrite 액션 `delete_http_header`를 `HTTP.REQ.HEADER("X-Client-Cert-CN").EXISTS` 조건으로 먼저 실행(삽입보다 먼저 적용되도록 정책 우선순위 주의) |
 | 지금 라이선스에 이 기능이 활성화돼 있는가 | ✅ Fixed Term 구독은 Advanced/Premium 등급만 판매(Standard 단종) — SSL 오프로드·클라이언트 인증서 인증·Rewrite는 전부 Standard 등급 핵심 기능이라 Advanced/Premium 어느 쪽에도 기본 포함. Premium이 추가로 주는 건 WAF/Bot/IP Reputation처럼 이번에 필요 없는 기능뿐 |
 
-**결론: 세 가지 요구사항 모두 지금 장비·라이선스로 별도 구매 없이 가능 — 옵션 ① 채택.**
+**결론: 세 가지 요구사항 모두 지금 장비·라이선스로 별도 구매 없이 가능.**
 
 ## 6. L4가 지원하지 않을 경우 (참고 — 이번엔 해당 없음)
 
@@ -131,7 +131,7 @@ Gateway 사이에 이 역할만 하는 가벼운 프록시(HAProxy·Nginx·Envoy
 방식(AWS SigV4·웹훅 서명 검증과 같은 패턴). TLS 핸드셰이크 단계의 보장(연결 자체가
 안 됨)만큼 강하진 않지만 "권한 없는 호출자 차단"이라는 목적은 달성한다.
 
-## 7. 다음 단계 (옵션 ① 채택 이후)
+## 7. 다음 단계 (옵션 ①로 진행할 경우)
 
 1. NetScaler에 슈퍼앱 전용 SSL vserver 신설 — 기존 API용 VIP와 분리
 2. 그 vserver에 `-clientAuth ENABLED -clientCert MANDATORY` 설정 + 슈퍼앱 클라이언트
