@@ -321,12 +321,16 @@ export default function App() {
         <button className={view === "arch" ? "tabOn" : ""} onClick={() => setView("arch")}>
           실서비스 아키텍처
         </button>
+        <button className={view === "pt" ? "tabOn" : ""} onClick={() => setView("pt")}>
+          발표 대본
+        </button>
       </nav>
 
       {view === "flow" && <FlowDoc file="/FLOW.md" />}
       {view === "argocd" && <FlowDoc file="/ARGOCD.md" />}
       {view === "mtls" && <FlowDoc file="/MTLS-REVIEW.md" />}
       {view === "arch" && <FlowDoc file="/ARCHITECTURE.md" />}
+      {view === "pt" && <FlowDoc file="/PRESENTATION.md" />}
 
       {view === "demo" && (
         <>
