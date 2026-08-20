@@ -315,10 +315,14 @@ export default function App() {
         <button className={view === "argocd" ? "tabOn" : ""} onClick={() => setView("argocd")}>
           ArgoCD 화면 읽는 법
         </button>
+        <button className={view === "mtls" ? "tabOn" : ""} onClick={() => setView("mtls")}>
+          mTLS 검토안
+        </button>
       </nav>
 
       {view === "flow" && <FlowDoc file="/FLOW.md" />}
       {view === "argocd" && <FlowDoc file="/ARGOCD.md" />}
+      {view === "mtls" && <FlowDoc file="/MTLS-REVIEW.md" />}
 
       {view === "demo" && (
         <>

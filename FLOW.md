@@ -5,34 +5,90 @@
 
 ## 1. 전체 그림
 
+처음엔 React → gateway → order-service → product-service, 3-hop짜리 단순한 그림이었다.
+지금은 인증(JWT/JWKS/jti)·mTLS·캐시·이벤트가 붙어서 그 그림 하나로는 더 이상 설명이 안
+된다 — 그래서 **요청 경로**(보안·업무 로직)와 **관측 스택**(로그·지표·트레이스)을 나눠서
+그린다. 번호 붙은 각 단계의 "왜"는 아래 절(2, 7~11절)에서 하나씩 자세히 다룬다.
+
+### 1.1 요청 경로 — 보안 계층이 쌓인 순서대로
+
 ```mermaid
 flowchart TB
-    subgraph Browser["브라우저 (localhost:5173)"]
-        React["React 앱"]
+    subgraph EXT["클러스터 밖"]
+        REACT["React 앱<br/>localhost:5173"]
     end
 
-    subgraph Cluster["k3d 클러스터 (msa-lab)"]
-        GW["gateway :8093"]
-        ORD["order-service :8092 (replica 2)"]
-        PRD["product-service :8091 (replica 2)"]
+    subgraph SA["슈퍼앱 백엔드 대역"]
+        PROXY["superapp-proxy :8095<br/>(클라이언트 인증서 보유)"]
+    end
+
+    subgraph BANK["은행 클러스터 (msa-lab)"]
+        subgraph GWBOX["gateway"]
+            PLAIN["평문 8093<br/>(k8s 헬스체크 전용)"]
+            MTLSPORT["mTLS 8446<br/>(클라이언트 인증서 필수)"]
+        end
+        AUTH["auth-service :8094<br/>JWT 발급 + JWKS"]
+        ORDER["order-service :8092<br/>(replica 2)"]
+        PRODUCT["product-service :8091<br/>(replica 2)"]
+        REDIS[("Redis<br/>① 상품 캐시(TTL 60초)<br/>② jti 폐기 목록")]
+        KAFKA[("Kafka<br/>order-events")]
+    end
+
+    REACT -->|"① 평범한 HTTP<br/>+ JWT Bearer"| PROXY
+    PROXY -->|"② mTLS 핸드셰이크<br/>클라이언트 인증서 제시"| MTLSPORT
+    MTLSPORT -->|"③ 로그인은 그대로 전달"| AUTH
+    MTLSPORT -->|"④ JWKS로 서명·aud 검증 +<br/>jti 폐기 여부 확인"| REDIS
+    MTLSPORT -->|"⑤ custKey→custId 변환 후<br/>X-Cust-Id로 라우팅"| ORDER
+    MTLSPORT --> PRODUCT
+    ORDER -->|"X-Action-Id·X-Cust-Id<br/>그대로 전달"| PRODUCT
+    ORDER -->|"⑥ 주문 이벤트 발행<br/>(X-Action-Id 헤더 포함)"| KAFKA
+    KAFKA -->|"⑦ 구독 — 재고 차감 시뮬레이션"| PRODUCT
+    PRODUCT -->|"⑧ 캐시 우선 조회"| REDIS
+```
+
+| 단계 | 무슨 일이 일어나나 | 자세히 |
+|---|---|---|
+| ①·② | 브라우저는 평범한 HTTP만 쓴다 — mTLS는 서버-서버 구간(프록시↔gateway)에서만 일어나고, 인증서가 없으면 TLS 핸드셰이크 자체가 실패한다 | 11절 |
+| ③·④ | JWKS 서명 검증(공개키만 공유) → aud로 "우리 시스템용 토큰인지" 확인 → Redis에서 jti 폐기 여부 확인 | 9절, 10절 |
+| ⑤ | 슈퍼앱 고객키(custKey)를 내부 고유키(custId)로 바꾸는 유일한 지점. 매핑이 없으면 fail-closed(403) | 9절 |
+| ⑥·⑦ | 주문 확정이 비동기로 product-service에 전파된다 — actionId가 Kafka 헤더로도 실려서 HTTP hop과 한 로그로 묶인다 | 7절 |
+| ⑧ | 상품 조회는 원장보다 Redis를 먼저 본다 — 캐시 하나가 완전히 다른 두 가지 일(상품 캐시·jti 폐기)에 쓰인다는 것도 주목할 점 | 7절 |
+
+### 1.2 관측 스택 — 다섯 서비스의 로그·지표·트레이스가 모이는 곳
+
+```mermaid
+flowchart TB
+    subgraph BANK["은행 클러스터 (msa-lab)"]
+        GW["gateway"]
+        AUTHSVC["auth-service"]
+        ORD["order-service (replica 2)"]
+        PRD["product-service (replica 2)"]
+        PROXY2["superapp-proxy"]
 
         subgraph LGTM["관측 스택"]
-            Promtail --> Loki
-            GW & ORD & PRD -.OTLP 트레이스.-> Tempo
-            PromAgent["Prometheus agent"] -->|remote_write| Mimir
-            PromAgent -->|scrape /actuator/prometheus| GW & ORD & PRD
-            Promtail -->|stdout 로그 수집| GW & ORD & PRD
+            Promtail
+            Loki
+            Mimir
+            Tempo
+            Grafana
+            PromAgent["Prometheus agent"]
         end
-
-        Grafana --> Loki
-        Grafana --> Tempo
-        Grafana --> Mimir
     end
 
-    React -->|"① fetch + X-Action-Id 헤더"| GW
-    GW -->|"② X-Action-Id 그대로 전달"| ORD
-    ORD -->|"③ X-Action-Id 그대로 전달"| PRD
+    GW & AUTHSVC & ORD & PRD -.OTLP 트레이스.-> Tempo
+    PromAgent -->|remote_write| Mimir
+    PromAgent -->|"scrape /actuator/prometheus"| GW & AUTHSVC & ORD & PRD & PROXY2
+    Promtail -->|stdout 로그 수집| GW & AUTHSVC & ORD & PRD & PROXY2
+    Promtail --> Loki
+    Grafana --> Loki
+    Grafana --> Tempo
+    Grafana --> Mimir
 ```
+
+**superapp-proxy만 트레이스(Tempo)가 없다** — OTel 자바에이전트를 의도적으로 안 붙였다.
+업무 로직이 없는 단순 패스스루라 지금은 로그·지표만으로 충분하다고 판단했다(트레이스가
+필요해지면 다른 서비스와 같은 방식으로 붙이면 된다). 로그에는 `custId`까지 MDC 키로 남아서,
+Loki에서 actionId 하나로 검색하면 HTTP hop + Kafka 비동기 hop이 전부 한 화면에 묶인다.
 
 ## 2. 요청 하나가 흘러가는 순서 (예: "주문하기" 버튼)
 
@@ -351,3 +407,18 @@ flowchart LR
 인증서 회전·폐기(CRL/OCSP), CA 자체의 보안(개인키 보관), 실제 서비스 메시(Istio/Linkerd
 같은 내부 mTLS — 이건 클러스터 **밖**의 파트너와의 mTLS라 서비스 메시와는 다른 문제다)는
 다루지 않는다. 이 랩의 CA는 "이 랩 전용 자체서명 CA"이지 신뢰할 수 있는 실제 CA가 아니다.
+
+### 이 랩의 배선 = 실제 운영 계획이 아니다
+
+위 1.1절 다이어그램은 **gateway 애플리케이션 자신이 mTLS를 직접 종료**하는 방식이다 —
+아래 "실제 아키텍처 대비 검토"에서 정리한 옵션 중 **옵션 ③**에 해당한다. 이 방식을 고른
+이유는 로컬 k3d 클러스터에는 실제 L4 로드밸런서나 Envoy Gateway 같은 물리적/상용 장비가
+없어서, 애플리케이션 코드 안에서 가장 확실하게 mTLS를 구현·검증할 수 있는 지점이었기
+때문이지, "실제 운영에서도 이렇게 한다"는 결론이 아니다.
+
+실제 next.msa 아키텍처(`infra/architecture.drawio`)는 채널BFF(AWS) → L4 로드밸런서 →
+Envoy Gateway → gateway로 이어지는 더 긴 체인이고, mTLS를 어디서 종료할지는 아직
+확정되지 않았다 — L4에서 종료(옵션 ①), Envoy Gateway에서 종료(옵션 ②), gateway
+자신에서 종료(옵션 ③, 이 랩과 동일) 세 가지를 비교한 결과가 **`MTLS-REVIEW.md`**("mTLS
+검토안" 탭)에 있다. 이 랩은 그중 하나(옵션 ③)가 "실제로 동작한다"는 것을 증명한
+프로토타입이고, 실제로 어느 옵션을 쓸지는 L4 장비의 기능 지원 여부에 달려 있다.
