@@ -2,8 +2,9 @@
 
 근거 문서: `infra/architecture.drawio`(next.msa 실제 설계) · 비교 대상: `msa-k3s-lab`(로컬 검증 랩)
 
-현재 상태: architecture.drawio에는 mTLS가 반영돼 있지 않다 — 이 문서는 넣을지 말지, 넣는다면
-어떻게 넣을지를 정리한 것이다.
+현재 상태: **옵션 ① — L4(NetScaler MPX 9230)에서 종료 — 채택 확정(2026-08-20)**.
+architecture.drawio에는 아직 mTLS가 반영돼 있지 않았고, 이 문서는 넣을지 말지부터
+검토해 실제 장비로 지원 여부까지 확인한 과정과 결론을 정리한 것이다.
 
 ## 1. 배경
 
@@ -48,7 +49,7 @@ flowchart TB
     ENVOY --> GW
     GW --> SVC
 
-    OPT1["옵션 ① 여기서 종료<br/>전용 VIP + 클라이언트 인증서 정책"]
+    OPT1["옵션 ① 여기서 종료 ✅ 채택<br/>전용 VIP + 클라이언트 인증서 정책"]
     OPT2["옵션 ② 여기서 종료<br/>L4는 패스스루로 전환"]
     OPT3["옵션 ③ 여기서 종료<br/>전용 네트워크 경로 신설"]
 
@@ -62,15 +63,18 @@ flowchart TB
 
 ## 4. 옵션별 비교
 
-### 옵션 ① — L4 로드밸런서에서 종료 (변경 범위: 최소)
+### 옵션 ① — L4 로드밸런서에서 종료 ✅ 채택 (변경 범위: 최소)
 
 - **방법**: 슈퍼앱 전용 VIP 신설 → 그 리스너에만 클라이언트 인증서 요구 → 검증된 CN을
   헤더로 하위 전달(예: `X-Client-Cert-CN`) → 원본 요청에 같은 헤더가 있으면 L4가
   제거(sanitize)
 - **장점**: Envoy Gateway·gateway 코드 변경 거의 없음. 기존 직원 트래픽(브라우저·Electron)
   경로는 그대로 유지
-- **전제조건**: L4 장비가 클라이언트 인증서 검증 + 헤더 주입 + 헤더 sanitize 세 가지를
-  모두 지원해야 함(5절 참고)
+- **전제조건 — 확인 완료(2026-08-20)**: 실제 L4는 Citrix NetScaler MPX 9230(Fixed Term
+  Software 구독, 30Gbps, Advanced/Premium 등급). 클라이언트 인증서 검증(`-clientAuth
+  ENABLED -clientCert MANDATORY`) + Rewrite 기반 헤더 삽입(`insert_http_header`) + 헤더
+  삭제/sanitize(`delete_http_header`) 세 가지 모두 Standard 등급 기능이라 Advanced/Premium
+  라이선스에 전부 포함 — 별도 애드온 없이 사용 가능. 상세는 5절 참고
 - **단점**: 신원 증명이 "TLS 세션"이 아니라 "L4가 만든 헤더를 하위가 신뢰"하는 모델 —
   L4~gateway 구간이 폐쇄망이어야 안전
 
@@ -95,24 +99,24 @@ flowchart TB
 - **단점**: next.msa의 기존 관례(모든 트래픽이 Envoy Gateway를 거쳐 헤더 전파·관측이
   일관됨)에서 벗어나는 예외 경로가 하나 생김
 
-## 5. L4 장비 지원 여부 확인
+## 5. L4 장비 지원 여부 확인 — 확인 완료
 
-①번을 쓰려면 아래 세 가지를 확인해야 하고, 정확한 답은 그 장비를 운영하는 팀에게
-물어봐야 한다 — 같은 제품이라도 라이선스 등급·펌웨어 버전에 따라 기능이 잠겨 있을 수
-있다.
+실제 장비: **Citrix NetScaler MPX 9230**, Fixed Term Software 구독 라이선스, Throughput
+30Gbps. 아래 네 가지를 웹 검색으로 확인했다.
 
-- 이 장비가 리스너(VIP) 단위로 클라이언트 인증서 요구(mTLS termination)를 걸 수 있는가
-- 검증된 인증서 정보(CN 등)를 백엔드로 헤더로 전달할 수 있는가
-- 클라이언트가 보낸 요청에 같은 이름의 헤더가 이미 있으면 제거(sanitize)해주는가
-- 지금 이 장비에 그 기능을 쓸 수 있는 라이선스·모듈이 활성화돼 있는가
+| 확인 항목 | 결과 |
+|---|---|
+| 리스너(VIP) 단위 클라이언트 인증서 요구 | ✅ 지원 — `set ssl vserver <name> -clientAuth ENABLED -clientCert MANDATORY` |
+| 검증된 인증서 정보(CN 등)를 헤더로 하위 전달 | ✅ 지원 — Rewrite(AppExpert) 액션으로 `insert_http_header X-Client-Cert-CN "CLIENT.SSL.CLIENT_CERT.SUBJECT.VALUE(\"CN\")"` |
+| 원본 요청에 같은 헤더가 있으면 제거(sanitize) | ✅ 지원 — Rewrite 액션 `delete_http_header`를 `HTTP.REQ.HEADER("X-Client-Cert-CN").EXISTS` 조건으로 먼저 실행(삽입보다 먼저 적용되도록 정책 우선순위 주의) |
+| 지금 라이선스에 이 기능이 활성화돼 있는가 | ✅ Fixed Term 구독은 Advanced/Premium 등급만 판매(Standard 단종) — SSL 오프로드·클라이언트 인증서 인증·Rewrite는 전부 Standard 등급 핵심 기능이라 Advanced/Premium 어느 쪽에도 기본 포함. Premium이 추가로 주는 건 WAF/Bot/IP Reputation처럼 이번에 필요 없는 기능뿐 |
 
-장비명(F5 BIG-IP, Citrix ADC, HAProxy 등)을 알면 정확한 설정 항목까지 같이 확인할 수
-있다 — 대부분의 상용 L4/L7 장비가 이 기능을 지원하지만, 확답은 그 장비의 스펙과 현재
-라이선스로만 알 수 있다.
+**결론: 세 가지 요구사항 모두 지금 장비·라이선스로 별도 구매 없이 가능 — 옵션 ① 채택.**
 
-## 6. L4가 지원하지 않을 경우
+## 6. L4가 지원하지 않을 경우 (참고 — 이번엔 해당 없음)
 
-①번이 막혀도 대부분 무난히 우회할 수 있다 — 아래 순서대로 검토한다.
+5절에서 ①번이 확인돼 아래 대안은 실제로는 필요 없어졌다. 다음에 다른 장비/구간에서
+같은 검토가 필요할 때를 위해 순서만 기록으로 남긴다.
 
 **A. 옵션 ②(Envoy Gateway)로 이동** — 사실상 기본 대안. Envoy Gateway는 우리가 직접
 운영하는 오픈소스라 벤더 제약이 없다. 이때 L4에 요구되는 건 클라이언트 인증서 검증이
@@ -127,10 +131,15 @@ Gateway 사이에 이 역할만 하는 가벼운 프록시(HAProxy·Nginx·Envoy
 방식(AWS SigV4·웹훅 서명 검증과 같은 패턴). TLS 핸드셰이크 단계의 보장(연결 자체가
 안 됨)만큼 강하진 않지만 "권한 없는 호출자 차단"이라는 목적은 달성한다.
 
-## 7. 다음 단계
+## 7. 다음 단계 (옵션 ① 채택 이후)
 
-1. L4 장비의 정확한 제품명·모델·펌웨어 버전 확인
-2. 운영팀에 5절의 네 가지 질문 전달
-3. 답변에 따라 옵션 ①~③ 중 확정, 안 되면 6절의 대안 순서대로 검토
-4. 부수 발견 사항도 함께 정리 — custKey→cust_unno 변환 지점을 어디(gateway?
-   customer-service?)로 할지, 고객 토큰의 로그아웃/폐기 개념이 필요한지
+1. NetScaler에 슈퍼앱 전용 SSL vserver 신설 — 기존 API용 VIP와 분리
+2. 그 vserver에 `-clientAuth ENABLED -clientCert MANDATORY` 설정 + 슈퍼앱 클라이언트
+   인증서를 신뢰할 CA를 vserver에 바인딩
+3. Rewrite 정책 2개 구성 — ① 원본 요청의 `X-Client-Cert-CN` 헤더 제거(sanitize, 스푸핑
+   방지) → ② 검증된 인증서 CN을 같은 이름으로 재삽입. 순서가 바뀌면 클라이언트가 보낸
+   위조 헤더가 그대로 통과한다
+4. Envoy Gateway/gateway 쪽에 `X-Client-Cert-CN` 헤더 신뢰 필터 추가 — 이 경로로 들어온
+   요청에서만 이 헤더를 신뢰(다른 경로로 들어오면 거부)
+5. 미해결 항목 마저 정리 — custKey→cust_unno 변환 지점을 어디(gateway? customer-service?)로
+   할지, 고객 토큰의 로그아웃/폐기(jti revocation) 개념이 필요한지
