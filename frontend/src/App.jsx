@@ -318,11 +318,15 @@ export default function App() {
         <button className={view === "mtls" ? "tabOn" : ""} onClick={() => setView("mtls")}>
           mTLS 검토안
         </button>
+        <button className={view === "arch" ? "tabOn" : ""} onClick={() => setView("arch")}>
+          실서비스 아키텍처
+        </button>
       </nav>
 
       {view === "flow" && <FlowDoc file="/FLOW.md" />}
       {view === "argocd" && <FlowDoc file="/ARGOCD.md" />}
       {view === "mtls" && <FlowDoc file="/MTLS-REVIEW.md" />}
+      {view === "arch" && <FlowDoc file="/ARCHITECTURE.md" />}
 
       {view === "demo" && (
         <>
