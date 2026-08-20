@@ -12,7 +12,16 @@ import org.springframework.web.client.RestClient
 
 // 프록시가 그대로 실어 보내면 안 되는 hop-by-hop 헤더 — HttpClient 가 자기 값으로 새로 계산한다.
 private val EXCLUDED_REQUEST_HEADERS = setOf("host", "content-length", "connection")
-private val EXCLUDED_RESPONSE_HEADERS = setOf("transfer-encoding", "connection")
+
+// gateway 응답에도 CORS 헤더(gateway 자신의 SecurityConfig CORS 설정)가 실려 있는데, 이걸
+// 그대로 복사하면 이 프록시의 CorsConfig 가 붙이는 것과 겹쳐 Access-Control-Allow-Origin 이
+// 두 번 실린다 — 브라우저는 값이 둘이면 CORS 자체를 실패시킨다(스펙상 헤더 하나만 허용).
+// 브라우저를 직접 마주치는 건 이제 이 프록시뿐이므로, CORS 는 여기 것만 남긴다.
+private val EXCLUDED_RESPONSE_HEADERS = setOf("transfer-encoding", "connection") +
+    setOf(
+        "access-control-allow-origin", "access-control-allow-credentials", "access-control-allow-methods",
+        "access-control-allow-headers", "access-control-expose-headers", "access-control-max-age", "vary",
+    )
 
 /**
  * 받은 요청(메서드·경로·헤더·바디)을 그대로 은행 gateway 의 mTLS 포트로 넘기는 범용 패스스루.
