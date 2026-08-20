@@ -29,7 +29,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [gateway, order-service, product-service, auth-service]
+        service: [gateway, order-service, product-service, auth-service, superapp-proxy]
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +76,7 @@ jobs:
           sed -i "s#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-order-service:.*#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-order-service:${{ github.sha }}#" k8s/order-service.yaml
           sed -i "s#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-product-service:.*#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-product-service:${{ github.sha }}#" k8s/product-service.yaml
           sed -i "s#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-auth-service:.*#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-auth-service:${{ github.sha }}#" k8s/auth-service.yaml
+          sed -i "s#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-superapp-proxy:.*#ghcr.io/${{ github.repository_owner }}/msa-k3s-lab-superapp-proxy:${{ github.sha }}#" k8s/superapp-proxy.yaml
 
       - name: Commit and push (skip CI to avoid a bump loop)
         run: |

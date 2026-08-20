@@ -1,0 +1,71 @@
+# 슈퍼앱 백엔드 대역 — React(브라우저)가 마주치는 진입점이자, 은행 gateway 의 mTLS 포트로
+# 넘어가는 유일한 통로. 클라이언트 인증서(superapp-proxy-mtls Secret)를 들고 있다는 사실 자체가
+# "이 서비스가 슈퍼앱 백엔드다"라는 신원 증명이다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superapp-proxy
+  labels:
+    app: superapp-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: superapp-proxy
+  template:
+    metadata:
+      labels:
+        app: superapp-proxy
+    spec:
+      containers:
+        - name: superapp-proxy
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-superapp-proxy:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8095
+          env:
+            - name: BANK_GATEWAY_URL
+              value: "https://gateway:8446"
+            - name: MTLS_KEYSTORE_PATH
+              value: /etc/mtls/keystore.p12
+            - name: MTLS_TRUSTSTORE_PATH
+              value: /etc/mtls/truststore.p12
+            - name: MTLS_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: superapp-proxy-mtls
+                  key: password
+            - name: MTLS_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: superapp-proxy-mtls
+                  key: password
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/mtls
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8095
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8095
+            initialDelaySeconds: 15
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: superapp-proxy-mtls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: superapp-proxy
+spec:
+  selector:
+    app: superapp-proxy
+  ports:
+    - port: 8095
+      targetPort: 8095

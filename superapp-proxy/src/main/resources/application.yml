@@ -1,0 +1,19 @@
+server:
+  port: 8095
+
+spring:
+  application:
+    name: superapp-proxy
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health
+
+mtls:
+  bank-gateway-url: ${BANK_GATEWAY_URL:https://localhost:8446}
+  keystore-path: ${MTLS_KEYSTORE_PATH:}
+  keystore-password: ${MTLS_KEYSTORE_PASSWORD:}
+  truststore-path: ${MTLS_TRUSTSTORE_PATH:}
+  truststore-password: ${MTLS_TRUSTSTORE_PASSWORD:}

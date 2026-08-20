@@ -24,3 +24,12 @@ backend:
   order-service-url: ${ORDER_SERVICE_URL:http://localhost:8092}
   product-service-url: ${PRODUCT_SERVICE_URL:http://localhost:8091}
   auth-service-url: ${AUTH_SERVICE_URL:http://localhost:8094}
+
+# mTLS — 로컬 개발(bootRun)은 기본 비활성. 클러스터에서는 k8s Secret 마운트 경로를 env로 주입한다.
+mtls:
+  enabled: ${MTLS_ENABLED:false}
+  port: ${MTLS_PORT:8446}
+  keystore-path: ${MTLS_KEYSTORE_PATH:}
+  keystore-password: ${MTLS_KEYSTORE_PASSWORD:}
+  truststore-path: ${MTLS_TRUSTSTORE_PATH:}
+  truststore-password: ${MTLS_TRUSTSTORE_PASSWORD:}

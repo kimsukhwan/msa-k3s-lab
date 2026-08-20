@@ -277,3 +277,77 @@ sequenceDiagram
 
 **이 랩이 다루지 않는 것**: 이건 "세션 하나를 조기 종료"하는 장치이지, 9절에서 언급한 진짜
 1회용 토큰(nonce, 이체 확인 콜백 같은 단일 목적 토큰의 재사용 방지)과는 다른 용도입니다.
+
+## 11. mTLS — "이 연결이 진짜 슈퍼앱 서버에서 왔는가"
+
+지금까지(9~10절)의 JWT·aud·jti는 전부 **"이 요청이 진짜 고객의 것인가"**를 증명하는
+장치였다. 그런데 다른 질문이 하나 더 있다 — **"이 연결이 진짜 슈퍼앱의 서버에서 온 것인가"**.
+토큰이 로그 유출 등으로 새어나갔다면, 서명·aud·jti 검증만으로는 **어디서 호출하든**(공격자의
+서버 포함) 막을 방법이 없다. mTLS(상호 TLS)가 이 빈틈을 메운다.
+
+### 왜 브라우저가 아니라 서버-서버 구간에 거는가
+
+실제 구조는 "슈퍼앱 최종사용자 앱 → 슈퍼앱 백엔드 → (mTLS) → 은행 gateway"다. 브라우저가
+클라이언트 인증서를 직접 제시하는 UX는 OS 인증서 선택 팝업이 뜨는 등 이 데모 화면과 안 맞을
+뿐 아니라, 애초에 mTLS를 거는 지점 자체가 아니다. 그래서 **superapp-proxy**라는 서비스를
+"슈퍼앱 백엔드" 대역으로 하나 두고, React(브라우저, 슈퍼앱의 최종사용자 앱 대역)는 지금까지와
+똑같이 평범한 HTTP로 이 프록시를 부른다 — React 코드는 한 줄도 안 바뀐다.
+
+```mermaid
+flowchart LR
+    subgraph 외부["클러스터 밖 (React)"]
+        R["React"]
+    end
+    subgraph 슈퍼앱대역["슈퍼앱 백엔드 대역"]
+        P["superapp-proxy<br/>클라이언트 인증서 보유"]
+    end
+    subgraph 은행["은행 gateway"]
+        PLAIN["평문 포트 8093<br/>(k8s 헬스체크 전용)"]
+        MTLS["mTLS 포트 8446<br/>(클라이언트 인증서 필수)"]
+    end
+
+    R -->|"① 평범한 HTTP<br/>(JWT Bearer)"| P
+    P -->|"② mTLS 핸드셰이크<br/>(클라이언트 인증서 제시)"| MTLS
+    MTLS -->|"③ JWT 검증은 여기서 그대로"| ORD["order-service / product-service"]
+    kubelet["kubelet(헬스체크)"] -.->|"인증서 없이"| PLAIN
+```
+
+### 두 포트로 나눈 이유
+
+| | 포트 | 역할 |
+|---|---|---|
+| 평문 HTTP | 8093 | k8s 헬스체크(readiness/liveness) 전용. kubelet은 인증서를 제시하지 않으므로, 이 포트가 mTLS까지 요구하면 애초에 파드가 Ready 판정을 못 받는다 |
+| mTLS | 8446 | 업무 트래픽 전부. `PlainPortRestrictionFilter`가 평문 포트로 들어온 업무 경로 요청을 **JWT 검증 이전에** 403으로 끊는다 — "이게 JWT 문제가 아니라 채널(포트) 문제"라는 걸 분명히 하기 위해 Spring Security 필터보다 앞에 둔다 |
+
+### 상호(mutual) 검증 — 양쪽 다 확인한다
+
+- **gateway → superapp-proxy**: mTLS 포트가 `certificateVerification = "required"`로, 클라이언트
+  인증서가 없거나 CA가 다르면 **TLS 핸드셰이크 자체가 실패**한다. HTTP 요청이 오가기도 전에 끝난다.
+- **superapp-proxy → gateway**: superapp-proxy도 gateway의 서버 인증서가 이 랩의 CA가 서명한
+  게 맞는지 검증한다(자체 트러스트스토어로). 클라이언트 인증서만 보내고 서버 검증을 생략하면,
+  가짜 gateway에게 요청을 그대로 넘겨버리는 것과 같아서 양방향 다 확인해야 "상호" TLS다.
+
+### 인증서는 Git에 없다
+
+`k8s/mtls/generate-certs.sh`가 이 랩 전용 자체서명 CA와 인증서를 로컬에 생성하고,
+`k8s/mtls/load-secrets.sh`가 그걸 k8s Secret으로 클러스터에 직접 적용한다 — **ArgoCD(Git)
+동기화 대상이 아니다.** next.msa의 비밀값 정책과 같은 이유다: 비밀값은 Git이 아니라 클러스터에
+직접 주입한다. `certs/` 디렉터리는 `.gitignore` 대상이라 개인키가 저장소에 남지 않는다.
+
+### 화면·터미널에서 해볼 것
+
+- **React 화면**: 로그인·주문·로그아웃 등 지금까지의 모든 기능이 그대로 동작한다 — 배선이
+  `React → superapp-proxy → (mTLS) → gateway`로 바뀌었을 뿐, 브라우저 쪽은 아무것도 안
+  바뀌었다.
+- **터미널** (클러스터 안, `kubectl exec`로): gateway의 mTLS 포트(8446)에 인증서 없이 접속하면
+  TLS 핸드셰이크 자체가 실패한다. 평문 포트(8093)로 업무 경로를 직접 부르면 403이 난다 — 둘 다
+  "완벽히 유효한 JWT를 들고 있어도" 통하지 않는다는 게 요점이다.
+- 이제 클러스터 **밖에서 gateway를 직접 부를 방법이 없다** — Ingress가 superapp-proxy만
+  가리키므로, gateway의 Service는 ClusterIP로만 존재한다. 외부에서 도달 가능한 것은
+  superapp-proxy 하나뿐이다.
+
+### 이 랩이 다루지 않는 것
+
+인증서 회전·폐기(CRL/OCSP), CA 자체의 보안(개인키 보관), 실제 서비스 메시(Istio/Linkerd
+같은 내부 mTLS — 이건 클러스터 **밖**의 파트너와의 mTLS라 서비스 메시와는 다른 문제다)는
+다루지 않는다. 이 랩의 CA는 "이 랩 전용 자체서명 CA"이지 신뢰할 수 있는 실제 CA가 아니다.

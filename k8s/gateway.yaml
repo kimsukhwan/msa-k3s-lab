@@ -19,7 +19,8 @@ spec:
           image: ghcr.io/kimsukhwan/msa-k3s-lab-gateway:e6321f24ce87eb6fa5c23585e709c61c010c8c57
           imagePullPolicy: Always
           ports:
-            - containerPort: 8093
+            - containerPort: 8093 # 평문 HTTP — k8s 헬스체크 전용(PlainPortRestrictionFilter가 업무 경로는 막는다)
+            - containerPort: 8446 # mTLS — 실제 업무 트래픽은 전부 이 포트로만 들어온다
           env:
             - name: ORDER_SERVICE_URL
               value: "http://order-service:8092"
@@ -31,6 +32,28 @@ spec:
               value: "http://auth-service:8094/.well-known/jwks.json"
             - name: REDIS_HOST
               value: redis
+            - name: MTLS_ENABLED
+              value: "true"
+            - name: MTLS_PORT
+              value: "8446"
+            - name: MTLS_KEYSTORE_PATH
+              value: /etc/mtls/keystore.p12
+            - name: MTLS_TRUSTSTORE_PATH
+              value: /etc/mtls/truststore.p12
+            - name: MTLS_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-mtls
+                  key: password
+            - name: MTLS_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-mtls
+                  key: password
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/mtls
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /api/health
@@ -41,6 +64,10 @@ spec:
               path: /api/health
               port: 8093
             initialDelaySeconds: 15
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: gateway-mtls
 ---
 apiVersion: v1
 kind: Service
@@ -50,10 +77,17 @@ spec:
   selector:
     app: gateway
   ports:
-    - port: 8093
+    - name: plain-health
+      port: 8093
       targetPort: 8093
+    - name: mtls
+      port: 8446
+      targetPort: 8446
 ---
 # k3s에 기본 내장된 Traefik(Ingress Controller)이 이 규칙을 자동으로 잡는다.
+# 백엔드가 gateway 가 아니라 superapp-proxy 인 것에 주의 — 외부(React)는 슈퍼앱 백엔드
+# 대역까지만 도달하고, 거기서 은행 gateway 로는 mTLS(k8s Service 밖, superapp-proxy.yaml
+# 참고)로만 넘어간다. gateway 자신은 이제 클러스터 밖에서 직접 부를 수 없다.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -69,6 +103,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: gateway
+                name: superapp-proxy
                 port:
-                  number: 8093
+                  number: 8095

@@ -9,6 +9,7 @@ COPY product-service product-service
 COPY order-service order-service
 COPY gateway gateway
 COPY auth-service auth-service
+COPY superapp-proxy superapp-proxy
 RUN ./gradlew :gateway:bootJar -x test --no-daemon
 
 FROM eclipse-temurin:25-jre
