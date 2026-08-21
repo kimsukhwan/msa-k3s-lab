@@ -298,12 +298,12 @@ li::marker{color:var(--accent)}
 
 <details>
 <summary>토큰 이중 검증 <span class="term-en">(1차 채널BFF · 2차 gateway)</span></summary>
-<div class="body"><p>슈퍼앱이 발급한 <strong>같은 토큰 하나</strong>를 채널BFF(AWS)와 gateway(내부망)가 각자 독립적으로 검증하는 구조. 토큰을 중간에 바꾸거나 재발급하지 않는다. 1차는 위조·만료 토큰이 DX 회선과 내부망에 도달하기 전에 거르는 문지기, 2차는 "채널BFF가 침해당해도 내부망은 뚫리지 않게" 하는 격리벽이다 — 신뢰 경계(AWS 경계/내부망 경계)마다 검증을 하나씩 두는 것. JWKS 공개키 방식이라 검증 지점이 늘어도 비밀 공유가 없어 이 구조가 비용 없이 성립한다. gateway를 통과하면 토큰의 여정은 끝나고, 신원은 헤더(<code>X-Account-Id</code> 등)로 변환돼 하위로 내려간다 — 하위 서비스는 JWT를 전혀 모른다.</p></div>
+<div class="body"><p>고객 요청의 토큰을 두 지점에서 검증하는 구조. <strong>1차(채널BFF)</strong>는 슈퍼앱 토큰을 슈퍼앱 JWKS로 검증 — 위조·만료 토큰이 DX 회선과 내부망에 도달하기 전에 거르는 문지기. <strong>2차(gateway)</strong>는 교환된 <em>내부 토큰</em>을 우리 키로 검증 — 내부망 경계의 격리벽. 신뢰 경계(AWS 경계/내부망 경계)마다 검증을 하나씩 두되, 각 경계가 자기 소유의 키로 검증한다는 게 요점. gateway를 통과하면 토큰의 여정은 끝나고, 신원은 헤더(<code>X-Account-Id</code> 등)로 변환돼 하위로 내려간다 — 하위 서비스는 JWT를 전혀 모른다.</p></div>
 </details>
 
 <details>
-<summary>Token Exchange <span class="term-en">(토큰 재발급)</span> <span class="pill warn">이 프로젝트는 미사용</span></summary>
-<div class="body"><p>중간 계층(BFF 등)이 원 토큰을 검증한 뒤 자기 서명으로 내부용 토큰을 새로 발급해 내려보내는 패턴. 이 프로젝트가 안 쓰는 이유: 채널BFF가 발급자가 되는 순간 gateway가 "범위 밖(AWS)의 서명키"를 믿어야 하고, BFF가 침해당하면 위조 토큰을 <em>합법적으로</em> 만들 수 있게 돼 2차 검증이 무력화된다. 그래서 원 토큰을 그대로 흘리고 두 번 검증하는 쪽을 택했다.</p></div>
+<summary>Token Exchange <span class="term-en">(토큰 교환)</span> <span class="pill ok">채택 (2026-08-21)</span></summary>
+<div class="body"><p>중간 계층(채널BFF)이 원 토큰을 검증한 뒤 내부용 토큰으로 바꿔 내려보내는 패턴. 이 프로젝트의 채택 형태: BFF가 슈퍼앱 토큰을 1차 검증하면, <strong>auth-service</strong>(시스템 클라이언트 등록)에 자격증명과 함께 교환을 요청해 custKey가 담긴 <strong>짧은 수명의 내부 토큰</strong>을 발급받는다 — 내부로는 이 토큰만 흐르고, gateway는 우리 키로만 검증한다. 채택 이유: 내부 인증 경계를 타사(슈퍼앱) 키와 키 교체 일정에 의존시키지 않기 위해. 대가는 "슈퍼앱 서명의 종단 검증이 BFF까지"라는 신뢰 이동이며, BFF 자격증명 필수·수명 수 분·발급 감사 로그·mTLS(채널 증명)로 보완한다.</p></div>
 </details>
 
 <details>
