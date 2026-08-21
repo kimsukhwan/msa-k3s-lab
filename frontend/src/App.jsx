@@ -324,6 +324,9 @@ export default function App() {
         <button className={view === "pt" ? "tabOn" : ""} onClick={() => setView("pt")}>
           발표 대본
         </button>
+        <button className={view === "glossary" ? "tabOn" : ""} onClick={() => setView("glossary")}>
+          용어사전
+        </button>
       </nav>
 
       {view === "flow" && <FlowDoc file="/FLOW.md" />}
@@ -331,6 +334,10 @@ export default function App() {
       {view === "mtls" && <FlowDoc file="/MTLS-REVIEW.md" />}
       {view === "arch" && <FlowDoc file="/ARCHITECTURE.md" />}
       {view === "pt" && <FlowDoc file="/PRESENTATION.md" />}
+      {/* 용어사전은 자체 검색 스크립트가 있는 완결 HTML이라 markdown 변환 대신 iframe으로 원본을 그대로 띄운다 */}
+      {view === "glossary" && (
+        <iframe src="/GLOSSARY.html" title="프로젝트 용어 사전" style={{ width: "100%", height: "82vh", border: "none", borderRadius: "8px" }} />
+      )}
 
       {view === "demo" && (
         <>
