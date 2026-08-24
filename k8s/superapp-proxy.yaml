@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: superapp-proxy
-          image: ghcr.io/kimsukhwan/msa-k3s-lab-superapp-proxy:c0877e4336873c554b76e3d3cf8f58cf4e8f8192
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-superapp-proxy:9cc8a5670847f3cfa4cb064e0f3bfa1f3c183386
           imagePullPolicy: Always
           ports:
             - containerPort: 8095
