@@ -297,13 +297,28 @@ li::marker{color:var(--accent)}
 </details>
 
 <details>
-<summary>토큰 이중 검증 <span class="term-en">(1차 채널BFF · 2차 gateway)</span></summary>
-<div class="body"><p>고객 요청의 토큰을 두 지점에서 검증하는 구조. <strong>1차(채널BFF)</strong>는 슈퍼앱 토큰을 슈퍼앱 JWKS로 검증 — 위조·만료 토큰이 DX 회선과 내부망에 도달하기 전에 거르는 문지기. <strong>2차(gateway)</strong>는 교환된 <em>내부 토큰</em>을 우리 키로 검증 — 내부망 경계의 격리벽. 신뢰 경계(AWS 경계/내부망 경계)마다 검증을 하나씩 두되, 각 경계가 자기 소유의 키로 검증한다는 게 요점. gateway를 통과하면 토큰의 여정은 끝나고, 신원은 헤더(<code>X-Account-Id</code> 등)로 변환돼 하위로 내려간다 — 하위 서비스는 JWT를 전혀 모른다.</p></div>
+<summary>세션 없는 요청 서명 <span class="term-en">(Stateless Request Signing)</span> <span class="pill ok">최종 채택 (2026-08-24)</span></summary>
+<div class="body"><p>고객(슈퍼앱) 채널 인증의 최종 방식. 채널BFF가 슈퍼앱 토큰을 매 요청 1차 검증하고, 그 요청 하나에 대해 <strong>HMAC 서명</strong>(공유 비밀 + method·path·timestamp·nonce·custKey)을 생성해 gateway로 보낸다. gateway는 서명·timestamp(±60초)·nonce 중복(짧은 Redis 캐시)만 확인하고 — <strong>세션도, 발급 토큰도, 조회할 상태도 없다.</strong> 채택 이유: 슈퍼앱의 로그인·로그아웃을 우리 쪽에서 감지할 방법이 없다는 게 확인되면서, 세션(로그인 상태)을 우리 내부에 유지하려는 시도 자체가 실체 없는 TTL 근사치일 뿐임이 드러났다 — 그래서 세션 개념을 버리고 매 요청을 그 자리에서 독립적으로 증명하는 쪽을 택했다. mTLS(채널 증명)와 HMAC(요청 증명)이 서로 다른 비밀에 의존해 한쪽이 뚫려도 방어가 남는다.</p></div>
 </details>
 
 <details>
-<summary>Token Exchange <span class="term-en">(토큰 교환)</span> <span class="pill ok">채택 (2026-08-21)</span></summary>
-<div class="body"><p>중간 계층(채널BFF)이 원 토큰을 검증한 뒤 내부용 토큰으로 바꿔 내려보내는 패턴. 이 프로젝트의 채택 형태: BFF가 슈퍼앱 토큰을 1차 검증하면, <strong>auth-service</strong>(시스템 클라이언트 등록)에 자격증명과 함께 교환을 요청해 custKey가 담긴 <strong>짧은 수명의 내부 토큰</strong>을 발급받는다 — 내부로는 이 토큰만 흐르고, gateway는 우리 키로만 검증한다. 채택 이유: 내부 인증 경계를 타사(슈퍼앱) 키와 키 교체 일정에 의존시키지 않기 위해. 대가는 "슈퍼앱 서명의 종단 검증이 BFF까지"라는 신뢰 이동이며, BFF 자격증명 필수·수명 수 분·발급 감사 로그·mTLS(채널 증명)로 보완한다.</p></div>
+<summary>토큰 이중 검증 <span class="term-en">(1차 채널BFF · 2차 gateway)</span> <span class="pill warn">이전 검토안 (2026-08-20)</span></summary>
+<div class="body"><p>고객 요청의 같은 슈퍼앱 토큰을 채널BFF와 gateway 두 지점에서 검증하려던 초기안. gateway가 슈퍼앱 JWKS(kid)로 직접 2차 검증해야 해서, 내부 인증 경계가 타사(슈퍼앱)의 서명키·키 교체 일정에 의존하게 된다는 문제로 폐기됐다. "세션 없는 요청 서명"으로 최종 결정되기 전 단계.</p></div>
+</details>
+
+<details>
+<summary>Token Exchange <span class="term-en">(토큰 교환)</span> <span class="pill warn">이전 검토안 (2026-08-21)</span></summary>
+<div class="body"><p>채널BFF가 슈퍼앱 토큰을 1차 검증한 뒤 auth-service에서 내부 토큰으로 교환받아 gateway가 우리 키로만 검증하던 중간 단계 방식. 타사 키 의존은 해결했지만, 이후 "슈퍼앱 로그인·로그아웃을 감지할 수 없다"는 제약이 확인되며 — 이 방식이 전제한 "세션(내부 토큰)을 얼마간 유지한다"는 접근 자체가 성립하지 않는다는 게 드러나 폐기됐다. "세션 없는 요청 서명"으로 최종 결정됐다.</p></div>
+</details>
+
+<details>
+<summary>HMAC 요청 서명 <span class="term-en">(Request Signing)</span></summary>
+<div class="body"><p>토큰이 아니라 <strong>요청 하나하나</strong>에 서명을 붙이는 인증 방식. 발신자와 수신자가 공유 비밀(대칭키) 하나를 갖고, 요청의 메서드·경로·시각·난수·주요 파라미터를 합쳐 HMAC 서명을 계산한다. 수신자는 같은 계산을 반복해 값이 일치하는지, timestamp가 유효 창 안인지, nonce가 재사용되지 않았는지를 확인한다. AWS SigV4와 같은 원리. PKI(인증서·개인키 관리)가 필요 없고, 세션이나 발급 서버 없이도 매 요청을 독립적으로 증명할 수 있어 이 프로젝트의 채널 인증 최종안으로 채택됐다.</p></div>
+</details>
+
+<details>
+<summary>재전송 공격 <span class="term-en">(Replay Attack)</span> / nonce</summary>
+<div class="body"><p>이미 보낸(정상적인) 요청을 그대로 다시 전송해 부정 이용하는 공격. 서명이나 헤더 값 자체가 유출·도청되면, 그 값을 그대로 재사용하는 것만으로 인증을 통과할 수 있어 서명만으로는 막지 못한다. <strong>timestamp</strong>(유효 시간 창 밖의 요청 거부)와 <strong>nonce</strong>(요청마다 다른 난수, 한 번 본 값은 짧은 시간 동안 Redis 등에 기록해 재사용 거부)를 함께 써서 막는다. "세션 없는 요청 서명"에서 재전송 방지의 핵심 장치.</p></div>
 </details>
 
 <details>
