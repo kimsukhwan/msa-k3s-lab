@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: ghcr.io/kimsukhwan/msa-k3s-lab-auth-service:9cc8a5670847f3cfa4cb064e0f3bfa1f3c183386
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-auth-service:9bb7bc4426808084b854db9b01ed1057904788fa
           imagePullPolicy: Always
           ports:
             - containerPort: 8094
