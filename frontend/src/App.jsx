@@ -330,6 +330,9 @@ export default function App() {
         <button className={view === "authopt" ? "tabOn" : ""} onClick={() => setView("authopt")}>
           채널 인증 방식 비교
         </button>
+        <button className={view === "negotiation" ? "tabOn" : ""} onClick={() => setView("negotiation")}>
+          채널 인증 협의 자료
+        </button>
       </nav>
 
       {view === "flow" && <FlowDoc file="/FLOW.md" />}
@@ -338,9 +341,12 @@ export default function App() {
       {view === "arch" && <FlowDoc file="/ARCHITECTURE.md" />}
       {view === "pt" && <FlowDoc file="/PRESENTATION.md" />}
       {view === "authopt" && <FlowDoc file="/AUTH-OPTIONS.md" />}
-      {/* 용어사전은 자체 검색 스크립트가 있는 완결 HTML이라 markdown 변환 대신 iframe으로 원본을 그대로 띄운다 */}
+      {/* 용어사전·협의 자료는 자체 스타일을 갖춘 완결 HTML이라 markdown 변환 대신 iframe으로 원본을 그대로 띄운다 */}
       {view === "glossary" && (
         <iframe src="/GLOSSARY.html" title="프로젝트 용어 사전" style={{ width: "100%", height: "82vh", border: "none", borderRadius: "8px" }} />
+      )}
+      {view === "negotiation" && (
+        <iframe src="/CHANNEL-AUTH-NEGOTIATION.html" title="채널 인증 협의 자료" style={{ width: "100%", height: "82vh", border: "none", borderRadius: "8px" }} />
       )}
 
       {view === "demo" && (

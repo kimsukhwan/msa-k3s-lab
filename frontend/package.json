@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "sync-flow": "cp ../FLOW.md ../ARGOCD.md ../MTLS-REVIEW.md ../ARCHITECTURE.md ../PRESENTATION.md ../AUTH-OPTIONS.md public/ && cp ../용어사전.html public/GLOSSARY.html",
+    "sync-flow": "cp ../FLOW.md ../ARGOCD.md ../MTLS-REVIEW.md ../ARCHITECTURE.md ../PRESENTATION.md ../AUTH-OPTIONS.md public/ && cp ../용어사전.html public/GLOSSARY.html && cp ../CHANNEL-AUTH-NEGOTIATION.html public/CHANNEL-AUTH-NEGOTIATION.html",
     "predev": "npm run sync-flow",
     "prebuild": "npm run sync-flow"
   },
