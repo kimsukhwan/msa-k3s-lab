@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: ghcr.io/kimsukhwan/msa-k3s-lab-gateway:9bb7bc4426808084b854db9b01ed1057904788fa
+          image: ghcr.io/kimsukhwan/msa-k3s-lab-gateway:8496ec66b367b1067ba78127561878d2ad873cc2
           imagePullPolicy: Always
           ports:
             - containerPort: 8093 # 평문 HTTP — k8s 헬스체크 전용(PlainPortRestrictionFilter가 업무 경로는 막는다)
