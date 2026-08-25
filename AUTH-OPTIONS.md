@@ -1,6 +1,11 @@
 # 채널 인증 방식 — 최종 결정과 검토 과정
 
-## 최종 결정 (2026-08-24) — 세션 없는 요청 단위 HMAC 서명
+## 최종 결정 v1 (2026-08-24) — 세션 없는 요청 단위 HMAC 서명 〔대칭키〕
+
+> **v2로 갱신됨 — 아래 "최종 결정 v2" 참고.** 이 v1은 대체된 게 아니라 **기준선(베이스라인)으로
+> 보존**한다. "세션을 두지 않는다"는 핵심 방향은 v1과 v2가 동일하고, 차이는 요청 서명에
+> 대칭키(HMAC)를 쓰느냐 비대칭키(mTLS 인증서 재사용)를 쓰느냐뿐이다. 구현 난이도가
+> 낮다는 v1의 장점이 여전히 유효해, 상황에 따라 v1을 그대로 채택할 수도 있다.
 
 핵심 제약이 뒤늦게 확인됐다: **슈퍼앱의 로그인·로그아웃을 우리 쪽에서 감지할 방법이
 없다.** 통지(웹훅) 채널이 없고, 우리가 관찰할 수 있는 건 "미니앱이 유효한 슈퍼앱 토큰을
@@ -104,9 +109,107 @@ class ChannelRequestVerifier(
 | 네트워크 왕복 | 교환 왕복(1·2안) 또는 Redis 조회(8안) | **0회** — 로컬 CPU 연산 |
 | 내부 침투 방어 | mTLS만 | **mTLS + HMAC 비밀 이중** |
 
+---
+
+## 최종 결정 v2 (2026-08-25) — mTLS 인증서 키 재사용 서명 〔비대칭키, 권장〕
+
+**v1의 남은 약점**: HMAC은 대칭키라 채널BFF와 gateway가 **같은 비밀 값**을 나눠 갖는다.
+그 값 하나가 유출되면 유출시킨 쪽이 어디든 상관없이 임의의 고객 요청을 완벽하게 위조할
+수 있다. 세션이 없어 "이 세션만 무효화"도 못 하고, 대응은 비밀을 통째로 교체하는 것뿐 —
+그 교체가 완료될 때까지는 위조 요청과 진짜 요청을 구분할 방법이 없다.
+
+**핵심 아이디어**: 새 비밀을 하나 더 만들지 말고, **이미 있는 mTLS 클라이언트 인증서의
+키 쌍을 요청 서명에도 재사용**한다. 채널BFF는 mTLS 핸드셰이크를 하려면 어차피 개인키를
+로컬에 들고 있다 — 그 같은 개인키로 요청에 서명하면 되고, gateway는 그 인증서의
+**공개키만** 알면 검증할 수 있다. 이 공개키는 우리가 직접 발급·관리하는 CA의 것이라
+슈퍼앱 JWKS처럼 타사에 의존하는 문제도 아니다.
+
+```mermaid
+flowchart LR
+    APP["슈퍼앱"] --> BFF["채널BFF (AWS)<br/>① 슈퍼앱 토큰 1차 검증<br/>② mTLS 인증서 개인키로<br/>요청 서명(비대칭)"]
+    BFF -->|mTLS| L4["L4<br/>채널 신원 증명"]
+    L4 --> GW["gateway<br/>③ 인증서 공개키로<br/>서명 검증 (세션 없음)"]
+    GW --> LB["Layer B"]
+```
+
+이게 나아지는 이유:
+
+| | v1: HMAC 공유 비밀(대칭) | **v2: mTLS 키 재사용(비대칭)** |
+|---|---|---|
+| gateway가 들고 있는 값 | **위조에 쓸 수 있는** 비밀 그 자체 | 공개키뿐 — 유출돼도 위조 불가 |
+| 유출 시 파급 | 전체 채널 즉시 위조 가능 | **위조 불가** — 개인키는 여전히 BFF에만 있음 |
+| 새로 만들어야 할 것 | 별도 비밀 생성·배포·회전 절차 | **없음** — 기존 mTLS 인증서 수명주기에 얹힘 |
+| 회전 절차 | 새로 협의 필요(비밀 교환·주기) | mTLS 인증서 교체할 때 자동으로 같이 됨 |
+| 표준 근거 | 사내 자체 규격 | **IETF 표준(RFC 9421, HTTP Message Signatures)** |
+| 구현 난이도 | 낮음(HMAC 라이브러리 한 줄) | 중간(비대칭 서명 API 사용, 트래픽 규모에서 성능 차이는 무의미) |
+
+### 소스 구조 (v1과 거의 동일, 서명 알고리즘만 교체)
+
+```kotlin
+// 채널BFF 쪽 — 기존 mTLS 키스토어의 개인키를 그대로 재사용
+@Component
+class ChannelRequestSignerV2(private val mtlsKeyStore: KeyStore) {
+    private val privateKey = mtlsKeyStore.getKey("channel-client-cert", password) as PrivateKey
+
+    fun sign(method: String, path: String, custKey: String): SignedRequestHeaders {
+        val timestamp = Instant.now().epochSecond.toString()
+        val nonce = UUID.randomUUID().toString()
+        val payload = listOf(method, path, timestamp, nonce, custKey).joinToString("\n")
+        val sig = Signature.getInstance("SHA256withRSA").apply {
+            initSign(privateKey)
+            update(payload.toByteArray())
+        }
+        val signature = Base64.getEncoder().encodeToString(sig.sign())
+        return SignedRequestHeaders(signature, timestamp, nonce, custKey)
+    }
+}
+```
+
+```kotlin
+// gateway 쪽 — 채널BFF 인증서의 공개키(CA로 이미 관리 중)로 검증
+@Component
+class ChannelRequestVerifierV2(
+    private val trustedClientCert: X509Certificate,
+    private val redisTemplate: StringRedisTemplate,   // 재전송 방지 캐시 — v1과 동일
+) {
+    fun verify(request: ChannelSignedRequest): Boolean {
+        val withinWindow = abs(Instant.now().epochSecond - request.timestamp) <= 60
+        if (!withinWindow) return false
+
+        val firstSeen = redisTemplate.opsForValue()
+            .setIfAbsent("channel-nonce:${request.nonce}", "1", Duration.ofMinutes(5)) ?: false
+        if (!firstSeen) return false
+
+        val payload = listOf(request.method, request.path, request.timestamp,
+                              request.nonce, request.custKey).joinToString("\n")
+        val sig = Signature.getInstance("SHA256withRSA").apply {
+            initVerify(trustedClientCert.publicKey)
+            update(payload.toByteArray())
+        }
+        return sig.verify(Base64.getDecoder().decode(request.signature))
+    }
+}
+```
+
+- 재전송 방지(timestamp+nonce, Redis 캐시)는 v1과 동일 — 바뀌는 건 서명·검증 알고리즘뿐.
+- **v1의 "AWS Secrets Manager / k8s Secret 공유 비밀" 절차가 통째로 필요 없어진다** — 별도
+  비밀을 안 만드므로 배포·회전 협의 항목 자체가 사라진다. 대신 mTLS 인증서 발급·교체
+  절차("mTLS 검토안" 탭)를 그대로 따른다.
+- 대가: gateway가 채널BFF 인증서의 공개키(또는 그 CA)를 신뢰 설정으로 갖고 있어야 한다 —
+  이는 L4가 이미 하고 있는 CN 추출·검증과 같은 신뢰 체계의 연장이라 새로운 개념은 아니다.
+
+### 언제 v1, 언제 v2
+
+- **v2 권장** — 지금처럼 실제 도입을 앞두고 있고, "비밀 유출 = 즉시 전체 위조"라는 리스크를
+  피하고 싶을 때. 구현 비용 증가가 크지 않다.
+- **v1도 유효** — 프로토타입·PoC 단계처럼 구현 속도가 더 중요하거나, mTLS 인증서 발급
+  체계가 아직 안 갖춰진 환경에 먼저 적용해볼 때.
+
+---
+
 ## 추가 검토 — IDC에 전용 채널 인증 서비스를 둘 것인가 (배치 문제)
 
-**주의: 이것은 인증 방식(세션 없는 HMAC 서명)을 바꾸는 게 아니다.** 위 최종 결정은 그대로
+**주의: 이것은 인증 방식(세션 없는 요청 서명 — v1/v2 어느 쪽이든)을 바꾸는 게 아니다.** 위 결정은 그대로
 두고, "그 서명 검증 로직을 **어디에** 둘 것인가"라는 완전히 별개의 질문을 다룬다 —
 gateway 코드 안에 넣을지(A), IDC에 새 서비스를 하나 올려 그 서비스가 전담하게 할지(B).
 
